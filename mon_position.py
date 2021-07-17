@@ -33,7 +33,9 @@ class FetchLatestPosition(threading.Thread):
         threading.Thread.__init__(self)
         options = webdriver.ChromeOptions()
         options.binary_location = cfg.chrome_location
-        self.driver = webdriver.Chrome(cfg.driver_location,chrome_options=options)
+        options.add_argument("--headless")
+        options.add_argument("--disable-web-security")
+        self.driver = webdriver.Chrome(cfg.driver_location,options=options)
         self.prev_df = None
     def run(self):
         while True:
@@ -54,6 +56,8 @@ class FetchLatestPosition(threading.Thread):
                 continue
             if output["data"].empty:
                 continue
+            else:
+                print(output["data"])
             if self.prev_df is None:
                 isChanged = True
             else:

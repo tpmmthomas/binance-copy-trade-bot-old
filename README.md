@@ -27,6 +27,6 @@ Start by running backtesting of the bot first. o not engage money before you und
 ### Donations
 If you find this software helpful, welcome to make a donation!  
 BTC: 12TjqRz4MTTfjLXYrEueGVP1sKrpezWkxG   
-ETH(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98
+ETH(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98   
 BNB(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98
 
