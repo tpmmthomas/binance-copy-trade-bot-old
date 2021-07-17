@@ -22,11 +22,11 @@ This software is for non-commercial purposes only. Do not risk money which you a
 
 USE THIS SOFTWARE AT YOUR OWN RISK. THE AUTHORS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.     
 
-Always start by running a trading bot in Dry-run and do not engage money before you understand how it works and what profit/loss you should expect.  
+Start by running backtesting of the bot first. o not engage money before you understand how it works and what profit/loss you should expect.  
 
 ### Donations
-If you find this software helpful, welcome to make a donation!
-BTC: 12TjqRz4MTTfjLXYrEueGVP1sKrpezWkxG
+If you find this software helpful, welcome to make a donation!  
+BTC: 12TjqRz4MTTfjLXYrEueGVP1sKrpezWkxG   
 ETH(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98
 BNB(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98
 
