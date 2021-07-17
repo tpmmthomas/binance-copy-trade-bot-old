@@ -42,17 +42,17 @@ class FetchLatestPosition(threading.Thread):
             time.sleep(1.5)
             soup = BeautifulSoup(self.driver.page_source,features="html.parser")
             x = soup.get_text()
-            ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE CONFIG WHICH MIGHT BE CHANGED
+            ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
             x = x.split('\n')[4]
             idx = x.find("Position")
             idx2 = x.find("Start")
             x = x[idx:idx2]
-            ###
+            #######################################################################
             try:
                 output = format_results(x,self.driver.page_source)
             except:
                 continue
-            if output["time"] == "":
+            if output["data"].empty:
                 continue
             if self.prev_df is None:
                 isChanged = True
