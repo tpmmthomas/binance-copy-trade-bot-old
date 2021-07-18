@@ -41,6 +41,7 @@ class FetchLatestPosition(threading.Thread):
         self.isStop = threading.Event()
         self.fetch_url = fetch_url
         self.index = idx
+        self.num_no_data = 0
     def run(self):
         while not self.isStop.is_set():
             isChanged = False
@@ -58,7 +59,8 @@ class FetchLatestPosition(threading.Thread):
             idx3 = x.find("No data")
             x = x[idx:idx2]
             if idx3 != -1:
-                if not isinstance(self.prev_df,str):
+                self.num_no_data += 1
+                if self.num_no_data >=2 and not isinstance(self.prev_df,str):
                     now = datetime.now()
                     q.put(now)
                     mutex.acquire()
@@ -66,8 +68,12 @@ class FetchLatestPosition(threading.Thread):
                         f.write(f"Trader {self.index}, Current time: "+str(now)+"\n")
                         f.write("No positions.\n")
                     mutex.release()
-                self.prev_df = "x"
+                    # SEE THIS TWO TIMES BEFORE DOING ANYTHING
+                if self.num_no_data != 1:
+                    self.prev_df = "x"
                 continue
+            else:
+                self.num_no_data = 0
             #######################################################################
             try:
                 output = format_results(x,self.driver.page_source)
@@ -106,12 +112,13 @@ if __name__ == "__main__":
         thread.append(thr)
     i = 0
     while True:
+        print(i)
         if not q.empty():
             print(q.get())
         else:
             time.sleep(60)
             i += 1
-        if i == 10:
+        if i == 60:
             for x in thread:
                 x.stop()
             break
