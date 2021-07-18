@@ -49,7 +49,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.get(self.fetch_url)
             except:
                 continue
-            time.sleep(1.5)
+            time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source,features="html.parser")
             x = soup.get_text()
             ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
@@ -100,6 +100,7 @@ class FetchLatestPosition(threading.Thread):
                     f.write(output["data"].to_string()+"\n")
                 mutex.release()
             self.prev_df = output["data"][["symbol","size","Entry Price"]]
+            time.sleep(50)
     def stop(self):
         self.isStop.set()
             
@@ -116,12 +117,8 @@ if __name__ == "__main__":
         if not q.empty():
             print(q.get())
         else:
-            time.sleep(60)
+            time.sleep(120)
             i += 1
-        if i == 60:
-            for x in thread:
-                x.stop()
-            break
     for x in thread:
         x.join()
     print("ok!")
