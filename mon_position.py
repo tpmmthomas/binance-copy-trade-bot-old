@@ -8,6 +8,7 @@ from datetime import datetime
 import queue
 
 q = queue.Queue(60)
+mutex = threading.Lock()
 def format_results(x,y):
     words = []
     prev_idx =  0
@@ -29,7 +30,7 @@ def format_results(x,y):
     return {"time":times,"data":df}
 
 class FetchLatestPosition(threading.Thread):
-    def __init__(self,fetch_url):
+    def __init__(self,idx,fetch_url):
         threading.Thread.__init__(self)
         options = webdriver.ChromeOptions()
         options.binary_location = cfg.chrome_location
@@ -39,6 +40,7 @@ class FetchLatestPosition(threading.Thread):
         self.prev_df = None
         self.isStop = threading.Event()
         self.fetch_url = fetch_url
+        self.index = idx
     def run(self):
         while not self.isStop.is_set():
             isChanged = False
@@ -53,7 +55,19 @@ class FetchLatestPosition(threading.Thread):
             x = x.split('\n')[4]
             idx = x.find("Position")
             idx2 = x.find("Start")
+            idx3 = x.find("No data")
             x = x[idx:idx2]
+            if idx3 != -1:
+                if not isinstance(self.prev_df,str):
+                    now = datetime.now()
+                    q.put(now)
+                    mutex.acquire()
+                    with open(cfg.save_file,"a",encoding='utf-8') as f:
+                        f.write(f"Trader {self.index}, Current time: "+str(now)+"\n")
+                        f.write("No positions.\n")
+                    mutex.release()
+                self.prev_df = "x"
+                continue
             #######################################################################
             try:
                 output = format_results(x,self.driver.page_source)
@@ -61,8 +75,6 @@ class FetchLatestPosition(threading.Thread):
                 continue
             if output["data"].empty:
                 continue
-            else:
-                print(output["data"])
             if self.prev_df is None:
                 isChanged = True
             else:
@@ -75,29 +87,36 @@ class FetchLatestPosition(threading.Thread):
             if isChanged:
                 now = datetime.now()
                 q.put(now)
+                mutex.acquire()
                 with open(cfg.save_file,"a",encoding='utf-8') as f:
-                    f.write("Current time: "+str(now)+"\n")
+                    f.write(f"Trader {self.index}, Current time: "+str(now)+"\n")
                     f.write(output["time"]+"\n")
                     f.write(output["data"].to_string()+"\n")
+                mutex.release()
             self.prev_df = output["data"][["symbol","size","Entry Price"]]
     def stop(self):
         self.isStop.set()
             
             
-if __name__ == "__main__":         
-    thr = FetchLatestPosition(cfg.position_url)
-    thr.start()
+if __name__ == "__main__":
+    thread = []
+    for i,url in enumerate(cfg.position_url):         
+        thr = FetchLatestPosition(i,url)
+        thr.start()
+        thread.append(thr)
     i = 0
     while True:
         if not q.empty():
             print(q.get())
-            i += 1
         else:
             time.sleep(60)
-        if i == 2:
-            thr.stop()
+            i += 1
+        if i == 10:
+            for x in thread:
+                x.stop()
             break
-    thr.join()
+    for x in thread:
+        x.join()
     print("ok!")
 
     
