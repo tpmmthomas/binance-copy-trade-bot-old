@@ -22,7 +22,7 @@ This software is for non-commercial purposes only. Do not risk money which you a
 
 USE THIS SOFTWARE AT YOUR OWN RISK. THE AUTHORS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.     
 
-Start by running backtesting of the bot first. o not engage money before you understand how it works and what profit/loss you should expect.  
+Start by running backtesting of the bot first. Do not engage money before you understand how it works and what profit/loss you should expect.  
 
 ### Donations
 If you find this software helpful, welcome to make a donation!  

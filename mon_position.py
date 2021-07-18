@@ -29,7 +29,7 @@ def format_results(x,y):
     return {"time":times,"data":df}
 
 class FetchLatestPosition(threading.Thread):
-    def __init__(self):
+    def __init__(self,fetch_url):
         threading.Thread.__init__(self)
         options = webdriver.ChromeOptions()
         options.binary_location = cfg.chrome_location
@@ -37,10 +37,15 @@ class FetchLatestPosition(threading.Thread):
         options.add_argument("--disable-web-security")
         self.driver = webdriver.Chrome(cfg.driver_location,options=options)
         self.prev_df = None
+        self.isStop = threading.Event()
+        self.fetch_url = fetch_url
     def run(self):
-        while True:
+        while not self.isStop.is_set():
             isChanged = False
-            self.driver.get(cfg.position_url)
+            try:
+                self.driver.get(self.fetch_url)
+            except:
+                continue
             time.sleep(1.5)
             soup = BeautifulSoup(self.driver.page_source,features="html.parser")
             x = soup.get_text()
@@ -75,15 +80,26 @@ class FetchLatestPosition(threading.Thread):
                     f.write(output["time"]+"\n")
                     f.write(output["data"].to_string()+"\n")
             self.prev_df = output["data"][["symbol","size","Entry Price"]]
+    def stop(self):
+        self.isStop.set()
             
             
 if __name__ == "__main__":         
-    thr = FetchLatestPosition()
+    thr = FetchLatestPosition(cfg.position_url)
     thr.start()
+    i = 0
     while True:
         if not q.empty():
             print(q.get())
+            i += 1
         else:
             time.sleep(60)
+        if i == 2:
+            thr.stop()
+            break
+    thr.join()
+    print("ok!")
+
+    
     
 
