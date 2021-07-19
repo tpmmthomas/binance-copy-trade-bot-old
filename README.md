@@ -13,9 +13,10 @@ pip install -r requirements.txt
 ### Software setup 
 1. Download chrome browser at https://www.google.com/intl/zh-CN/chrome/
 2. Download chrome driver at https://chromedriver.chromium.org/downloads
-3. `mv constants_sample.py constants.py` and fill in the required fields
-4. Fill in the required fields at `config/config.py`
-5. Run `mon_position.py`
+3. Setup a telegram bot using `Botfather` (details on telegram official site) and mark the access token.
+4. `mv constants_sample.py constants.py` and fill in the required fields
+5. Fill in the required fields at `config/config.py`
+6. Run `mon_position.py`
 
 ### Disclaimer
 
