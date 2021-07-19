@@ -1,4 +1,4 @@
-# binance-copy-trade-bot
+# binance-copy-trade-bot (still in development)
 ### Environment setup (Recommended)
 
 #### Using Conda
