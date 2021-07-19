@@ -150,7 +150,6 @@ class FetchLatestPosition(threading.Thread):
     def stop(self):
         self.isStop.set()
 
-
 def retrieveUserName(url):
     success = False
     name = ""
@@ -161,7 +160,7 @@ def retrieveUserName(url):
         except: 
             time.sleep(0.1)
             continue
-    while not success:
+    while not success or name == "No Battle Record Found":
         try:
             myDriver.get(url)
         except:
@@ -240,7 +239,8 @@ def add_trader(update: Update, context: CallbackContext) -> int:
     return TRADERURL2
 
 def url_add(update: Update, context: CallbackContext) -> int:
-    context.user_data['url'] = update.message.text  
+    context.user_data['url'] = update.message.text
+    update.message.reply_text("Please wait...", reply_markup=ReplyKeyboardRemove())
     try:
         myDriver = webdriver.Chrome(cfg.driver_location,options=options)
         myDriver.get(context.user_data['url'])
@@ -265,15 +265,26 @@ def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
     update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader')
 
-def delete(update: Update, context: CallbackContext):
+def split(a, n):
+    if n==0:
+        return [a]
+    k, m = divmod(len(a), n)
+    return [a[i * k + min(i, m):(i + 1) * k + min(i + 1, m)] for i in range(n)]
+
+def delete_trader(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
     listtraders = CurrentUsers[update.message.chat_id].trader_names
-    if len(listtraders[0]) == 0:
+    if len(listtraders) == 0:
         update.message.reply_text("You are not following any traders.")
         return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
     update.message.reply_text("Please choose the trader to remove.\n(/cancel to cancel)",
         reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
         )
     return TRADERNAME
+
 
 def delTrader(update: Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
@@ -282,7 +293,7 @@ def delTrader(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
-    update.message.reply_text("Please wait...")
+    update.message.reply_text("Please wait. It takes around 1 min...")
     user.trader_urls.pop(idx)
     user.trader_names.pop(idx)
     user.threads[idx].stop()
@@ -329,12 +340,12 @@ def main() -> None:
     conv_handler2 = ConversationHandler(
         entry_points=[CommandHandler('add', add_trader)],
         states={
-            TRADERURL2: [MessageHandler(Filters.text, url_add)],
+            TRADERURL2: [MessageHandler(Filters.text & ~Filters.command, url_add)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
     conv_handler3 = ConversationHandler(
-        entry_points=[CommandHandler('delete',delete)],
+        entry_points=[CommandHandler('delete',delete_trader)],
         states={
             TRADERNAME:[MessageHandler(Filters.text & ~Filters.command,delTrader)]
         },
