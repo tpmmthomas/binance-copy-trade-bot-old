@@ -19,9 +19,11 @@ from selenium import webdriver
 from bs4 import BeautifulSoup
 import threading
 from datetime import datetime
+import pickle
 import queue
 
-
+import urllib3
+urllib3.disable_warnings()
 # Enable logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -93,7 +95,10 @@ class FetchLatestPosition(threading.Thread):
         txsize = []
         if isinstance(df,str):
             for index,row in df2.iterrows():
-                size = float(row['size'])
+                size = row['size']
+                if isinstance(size,str):
+                    size = size.replace(",","")
+                size = float(size)
                 if size >0:
                     txtype.append("BuyLong")
                     txsymbol.append(row['symbol'])
@@ -105,7 +110,10 @@ class FetchLatestPosition(threading.Thread):
             txs = pd.DataFrame({"txtype":txtype,"symbol":txsymbol,"size":txsize})
         elif isinstance(df2,str):
             for index,row in df.iterrows():
-                size = float(row['size'])
+                size = row['size']  
+                if isinstance(size,str):
+                    size = size.replace(",","")
+                size = float(size)
                 if size > 0:
                     txtype.append("SellLong")
                     txsymbol.append(row['symbol'])
@@ -121,11 +129,17 @@ class FetchLatestPosition(threading.Thread):
                 hasChanged = False
                 temp = df2['symbol'] == row['symbol']
                 idx = df2.index[temp]
-                size = float(row['size'])
+                size = row['size']  
+                if isinstance(size,str):
+                    size = size.replace(",","")
+                size = float(size)
                 isPositive = size >=0
                 for r in idx:
                     df2row = df2.loc[r].values
-                    newsize = float(df2row[1])
+                    newsize = df2row[1]
+                    if isinstance(newsize,str):
+                        newsize = newsize.replace(",","")
+                    newsize = float(newsize)
                     if newsize == size:
                         df2 = df2.drop(r)
                         hasChanged = True
@@ -166,7 +180,10 @@ class FetchLatestPosition(threading.Thread):
                         txsymbol.append(row['symbol'])
                         txsize.append(-size)
             for index,row in df2.iterrows():
-                size = float(row['size'])
+                size = row['size']  
+                if isinstance(size,str):
+                    size = size.replace(",","")
+                size = float(size)
                 if size >0:
                     txtype.append("BuyLong")
                     txsymbol.append(row['symbol'])
@@ -287,9 +304,9 @@ def auth_check(update: Update, context: CallbackContext) -> int:
     if update.message.text == cnt.auth_code:
         update.message.reply_text(
             'Great! Please read the following disclaimer:\nThis software is for non-commercial purposes only.\n  \
-            Do not risk money which you are afraid to lose.\nUSE THIS SOFTWARE AT YOUR OWN RISK.\n *THE DEVELOPERS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.*\n \
-            Do not engage money before you understand how it works and what profit/loss you should expect. \n \
-            Type "yes" if you agree. Otherwise type /cancel and exit.',
+Do not risk money which you are afraid to lose.\nUSE THIS SOFTWARE AT YOUR OWN RISK.\n*THE DEVELOPERS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.*\n \
+Do not engage money before you understand how it works and what profit/loss you should expect. \n \
+Type "yes" if you agree. Otherwise type /cancel and exit.',
             parse_mode=telegram.ParseMode.MARKDOWN
         )
         return DISCLAIMER
@@ -419,7 +436,7 @@ def delete_trader(update: Update, context: CallbackContext):
 
 def delTrader(update: Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
-    logger.info("%s deleting trader %s.",update.message.text)
+    logger.info("%s deleting trader//.",update.message.text)
     try:
         idx = user.trader_names.index(update.message.text)
     except:
@@ -456,7 +473,7 @@ def auth_check2(update: Update, context: CallbackContext) -> int:
     logger.info("%s is doing authentication check for admin.", update.message.from_user.first_name)
     if update.message.text == cnt.admin_code:
         update.message.reply_text(
-            'Great! Please enter the message that you want to announce to all users. /cancel to cancel.'
+            'Great! Please enter the message that you want to announce to all users. /cancel to cancel, /save to save users data.'
         )
         return ANNOUNCE
     else:
@@ -467,6 +484,15 @@ def announce(update: Update, context: CallbackContext):
     for user in CurrentUsers:
         updater.bot.sendMessage(chat_id=user,text=update.message.text)
     logger.info("Message announced for all users.")
+    return ConversationHandler.END
+
+def save_to_file(update: Update, context: CallbackContext):
+    save_items = []
+    for user in CurrentUsers:
+        save_items.append({"chat_id":user.chat_id,"urls":user.trader_urls})
+    with open("userdata.pickle",'wb') as f:
+        pickle.dump(save_items,f)
+    logger.info("Saved user current state.")
     return ConversationHandler.END
 
 
@@ -527,7 +553,10 @@ def main() -> None:
         entry_points=[CommandHandler('admin', admin)],
         states={
             AUTH2: [MessageHandler(Filters.text & ~Filters.command, auth_check2)],
-            ANNOUNCE: [MessageHandler(Filters.text & ~Filters.command, announce)],
+            ANNOUNCE: [
+                MessageHandler(Filters.text & ~Filters.command, announce),
+                CommandHandler('save',save_to_file)
+            ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
