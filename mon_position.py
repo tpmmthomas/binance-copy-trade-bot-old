@@ -464,6 +464,15 @@ def end_all(update:Update, context: CallbackContext):
     logger.info("%s ended the service.",update.message.from_user.first_name)
     update.message.reply_text("Sorry to see you go. You are welcome to set up service again with /start.")
 
+def end_everyone(update:Update, context: CallbackContext):
+    for user in CurrentUsers:
+        for thread in user.threads:
+            thread.stop()
+        updater.bot.sendMessage(chat_id=user.chat_id,text="Your service has force ended by admin.")
+    logger.info("Everyone's service has ended.")
+    return ConversationHandler.END
+    
+
 def admin(update:Update, context: CallbackContext):
     update.message.reply_text("Please enter admin authorization code to continue.")
     return AUTH2
@@ -473,7 +482,7 @@ def auth_check2(update: Update, context: CallbackContext) -> int:
     logger.info("%s is doing authentication check for admin.", update.message.from_user.first_name)
     if update.message.text == cnt.admin_code:
         update.message.reply_text(
-            'Great! Please enter the message that you want to announce to all users. /cancel to cancel, /save to save users data.'
+            'Great! Please enter the message that you want to announce to all users. /cancel to cancel, /save to save users data, /endall to end all users.'
         )
         return ANNOUNCE
     else:
@@ -555,7 +564,8 @@ def main() -> None:
             AUTH2: [MessageHandler(Filters.text & ~Filters.command, auth_check2)],
             ANNOUNCE: [
                 MessageHandler(Filters.text & ~Filters.command, announce),
-                CommandHandler('save',save_to_file)
+                CommandHandler('save',save_to_file),
+                CommandHandler('endall',end_everyone)
             ],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
