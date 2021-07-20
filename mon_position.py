@@ -470,7 +470,7 @@ def end_everyone(update:Update, context: CallbackContext):
         user = CurrentUsers[user]
         for thread in user.threads:
             thread.stop()
-        updater.bot.sendMessage(chat_id=user.chat_id,text="Your service has force ended by admin.")
+        updater.bot.sendMessage(chat_id=user.chat_id,text="Your service has been force ended by admin.")
     logger.info("Everyone's service has ended.")
     return ConversationHandler.END
     
@@ -580,10 +580,18 @@ def main() -> None:
     dispatcher.add_handler(conv_handler4)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("end",end_all))
-
     #TODO: add /end command
     # Start the Bot
     updater.start_polling()
+    
+    with open("userdata.pickle","rb") as f:
+        userdata = pickle.load(f)
+    for x in userdata:
+        tname = retrieveUserName(x["url"][0])
+        CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["url"][0],tname)
+        for turl in x["url"][1:]:
+            tname = retrieveUserName(turl)
+            CurrentUsers[x["chat_id"]].add_trader(turl,tname)
 
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
