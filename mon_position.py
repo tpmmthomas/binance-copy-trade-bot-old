@@ -466,6 +466,7 @@ def end_all(update:Update, context: CallbackContext):
 
 def end_everyone(update:Update, context: CallbackContext):
     for user in CurrentUsers:
+        user = CurrentUsers[user]
         for thread in user.threads:
             thread.stop()
         updater.bot.sendMessage(chat_id=user.chat_id,text="Your service has force ended by admin.")
@@ -498,6 +499,7 @@ def announce(update: Update, context: CallbackContext):
 def save_to_file(update: Update, context: CallbackContext):
     save_items = []
     for user in CurrentUsers:
+        user = CurrentUsers[user]
         save_items.append({"chat_id":user.chat_id,"urls":user.trader_urls})
     with open("userdata.pickle",'wb') as f:
         pickle.dump(save_items,f)
