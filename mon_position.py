@@ -590,7 +590,7 @@ def main() -> None:
         for turl in x["urls"][1:]:
             tname = retrieveUserName(turl)
             CurrentUsers[x["chat_id"]].add_trader(turl,tname)
-            time.sleep(60)
+            time.sleep(10)
 
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
