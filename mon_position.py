@@ -303,10 +303,10 @@ def auth_check(update: Update, context: CallbackContext) -> int:
     logger.info("%s is doing authentication check.", update.message.from_user.first_name)
     if update.message.text == cnt.auth_code:
         update.message.reply_text(
-            'Great! Please read the following disclaimer:\nThis software is for non-commercial purposes only.\n  \
-Do not risk money which you are afraid to lose.\nUSE THIS SOFTWARE AT YOUR OWN RISK.\n*THE DEVELOPERS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.*\n \
-Do not engage money before you understand how it works and what profit/loss you should expect. \n \
-Type "yes" if you agree. Otherwise type /cancel and exit.',
+            'Great! Please read the following disclaimer:\nThis software is for non-commercial purposes only.\n\
+Do not risk money which you are afraid to lose.\nUSE THIS SOFTWARE AT YOUR OWN RISK.\n*THE DEVELOPERS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.*\n\
+Do not engage money before you understand how it works and what profit/loss you should expect. \n\
+Type "yes" (lowercase) if you agree. Otherwise type /cancel and exit.',
             parse_mode=telegram.ParseMode.MARKDOWN
         )
         return DISCLAIMER
