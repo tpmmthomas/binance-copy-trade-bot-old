@@ -223,7 +223,7 @@ class FetchLatestPosition(threading.Thread):
                         self.changes(self.prev_df,"x")
                 if self.num_no_data != 1:
                     self.prev_df = "x"
-                    time.sleep(40)
+                    time.sleep(60)
                 time.sleep(5)
                 continue
             else:
@@ -253,7 +253,7 @@ class FetchLatestPosition(threading.Thread):
                     self.changes(self.prev_df,output["data"])
             self.prev_df = output["data"]
             self.first_run = False
-            time.sleep(50)
+            time.sleep(60)
         self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
     def stop(self):
