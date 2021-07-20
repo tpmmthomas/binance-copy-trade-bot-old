@@ -587,9 +587,9 @@ def main() -> None:
     with open("userdata.pickle","rb") as f:
         userdata = pickle.load(f)
     for x in userdata:
-        tname = retrieveUserName(x["url"][0])
-        CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["url"][0],tname)
-        for turl in x["url"][1:]:
+        tname = retrieveUserName(x["urls"][0])
+        CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
+        for turl in x["urls"][1:]:
             tname = retrieveUserName(turl)
             CurrentUsers[x["chat_id"]].add_trader(turl,tname)
 
