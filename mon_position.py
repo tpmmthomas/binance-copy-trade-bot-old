@@ -29,7 +29,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE = range(6)
+AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER = range(7)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 mutex = threading.Lock()
@@ -86,7 +86,99 @@ class FetchLatestPosition(threading.Thread):
                 time.sleep(0.1)
                 continue
         self.first_run = True
-        
+
+    def changes(self,df,df2):
+        txtype = []
+        txsymbol = []
+        txsize = []
+        if isinstance(df,str):
+            for index,row in df2.iterrows():
+                size = float(row['size'])
+                if size >0:
+                    txtype.append("BuyLong")
+                    txsymbol.append(row['symbol'])
+                    txsize.append(size)
+                else:
+                    txtype.append("BuyShort")
+                    txsymbol.append(row['symbol'])
+                    txsize.append(size)
+            txs = pd.DataFrame({"txtype":txtype,"symbol":txsymbol,"size":txsize})
+        elif isinstance(df2,str):
+            for index,row in df.iterrows():
+                size = float(row['size'])
+                if size > 0:
+                    txtype.append("SellLong")
+                    txsymbol.append(row['symbol'])
+                    txsize.append(-size)
+                else:
+                    txtype.append("SellShort")
+                    txsymbol.append(row['symbol'])
+                    txsize.append(-size)
+            txs = pd.DataFrame({"txtype":txtype,"symbol":txsymbol,"size":txsize})
+        else:
+            df,df2 = df.copy(),df2.copy()
+            for index,row in df.iterrows():
+                hasChanged = False
+                temp = df2['symbol'] == row['symbol']
+                idx = df2.index[temp]
+                size = float(row['size'])
+                isPositive = size >=0
+                for r in idx:
+                    df2row = df2.loc[r].values
+                    newsize = float(df2row[1])
+                    if newsize == size:
+                        df2 = df2.drop(r)
+                        hasChanged = True
+                        break
+                    if isPositive and newsize > 0:
+                        changesize = newsize-size
+                        if changesize > 0:
+                            txtype.append("BuyLong")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                        else:
+                            txtype.append("SellLong")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                        df2 = df2.drop(idx)
+                        hasChanged = True
+                        break
+                    if not isPositive and newsize < 0:
+                        changesize = newsize - size
+                        if changesize > 0:
+                            txtype.append("SellShort")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                        else:
+                            txtype.append("BuyShort")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                        df2 = df2.drop(r)
+                        hasChanged = True
+                        break
+                if not hasChanged:
+                    if size > 0:
+                        txtype.append("SellLong")
+                        txsymbol.append(row['symbol'])
+                        txsize.append(-size)
+                    else:
+                        txtype.append("SellShort")
+                        txsymbol.append(row['symbol'])
+                        txsize.append(-size)
+            for index,row in df2.iterrows():
+                size = float(row['size'])
+                if size >0:
+                    txtype.append("BuyLong")
+                    txsymbol.append(row['symbol'])
+                    txsize.append(size)
+                else:
+                    txtype.append("BuyShort")
+                    txsymbol.append(row['symbol'])
+                    txsize.append(size)
+            txs = pd.DataFrame({"txType":txtype,"symbol":txsymbol,"size":txsize})
+        tosend = "*The following transactions will be executed:*\n"+txs.to_string()+"\n"
+        updater.bot.sendMessage(chat_id=self.chat_id,text=tosend,parse_mode=telegram.ParseMode.MARKDOWN)
+
     def run(self):
         print("starting",self.name)
         while not self.isStop.is_set():
@@ -108,13 +200,10 @@ class FetchLatestPosition(threading.Thread):
                 self.num_no_data += 1
                 if self.num_no_data >=2 and not isinstance(self.prev_df,str):
                     now = datetime.now()
-                    mutex.acquire()
                     tosend = f"Trader {self.name}, Current time: "+str(now)+"\nNo positions.\n"
-                    with open(cfg.save_file,"a",encoding='utf-8') as f:
-                        f.write(tosend)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    mutex.release()
-                    # SEE THIS TWO TIMES BEFORE DOING ANYTHING
+                    if not self.first_run:
+                        self.changes(self.prev_df,"x")
                 if self.num_no_data != 1:
                     self.prev_df = "x"
                     time.sleep(40)
@@ -129,24 +218,24 @@ class FetchLatestPosition(threading.Thread):
                 continue
             if output["data"].empty:
                 continue
-            if self.prev_df is None:
+            if self.prev_df is None or isinstance(self.prev_df,str):
                 isChanged = True
             else:
                 try:
                     toComp = output["data"][["symbol","size","Entry Price"]]
+                    prevdf = self.prev_df[["symbol","size","Entry Price"]]
                 except:
                     continue
-                if not toComp.equals(self.prev_df):
+                if not toComp.equals(prevdf):
                     isChanged=True
             if isChanged:
                 now = datetime.now()
-                mutex.acquire()
                 tosend = f"Trader {self.name}, Current time: "+str(now)+"\n"+output["time"]+"\n"+output["data"].to_string()+"\n"
-                with open(cfg.save_file,"a",encoding='utf-8') as f:
-                    f.write(tosend)
                 updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                mutex.release()
-            self.prev_df = output["data"][["symbol","size","Entry Price"]]
+                if not self.first_run:
+                    self.changes(self.prev_df,output["data"])
+            self.prev_df = output["data"]
+            self.first_run = False
             time.sleep(50)
         self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
@@ -197,12 +286,21 @@ def auth_check(update: Update, context: CallbackContext) -> int:
     logger.info("%s is doing authentication check.", update.message.from_user.first_name)
     if update.message.text == cnt.auth_code:
         update.message.reply_text(
-            'Great! Please provide a full URL to the trader you want to follow.'
+            'Great! Please read the following disclaimer:\nThis software is for non-commercial purposes only.\n  \
+            Do not risk money which you are afraid to lose.\nUSE THIS SOFTWARE AT YOUR OWN RISK.\n *THE DEVELOPERS ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.*\n \
+            Do not engage money before you understand how it works and what profit/loss you should expect. \n \
+            Type "yes" if you agree. Otherwise type /cancel and exit.',
+            parse_mode=telegram.ParseMode.MARKDOWN
         )
-        return TRADERURL
+        return DISCLAIMER
     else:
         update.message.reply_text("Sorry! The access code is wrong. Type /start again if you need to retry.")
         return ConversationHandler.END
+
+def disclaimer_check(update: Update, context: CallbackContext):
+    logger.info("%s has agreed to the disclaimer.", update.message.from_user.first_name)
+    update.message.reply_text("Please provide a full URL to the trader you want to follow.")
+    return TRADERURL
 
 def initTraderThread(url,chat_id):
     traderName = retrieveUserName(url)
@@ -255,7 +353,11 @@ def add_trader(update: Update, context: CallbackContext) -> int:
 def addTraderThread(url,chat_id,firstname):
     traderName = retrieveUserName(url)
     if traderName in CurrentUsers[chat_id].trader_names:
+        print(traderName,CurrentUsers[chat_id].trader_names)
         updater.bot.sendMessage(chat_id=chat_id,text="You already followed this trader.")
+        mutex.acquire()
+        CurrentUsers[chat_id].is_handling = False
+        mutex.release()
         return
     logger.info("%s has added trader %s.", firstname,traderName)
     updater.bot.sendMessage(
@@ -263,7 +365,9 @@ def addTraderThread(url,chat_id,firstname):
         text=f'Thanks! You will start receiving alerts when {traderName} changes positions.'
     )
     CurrentUsers[chat_id].add_trader(url,traderName)
+    mutex.acquire()
     CurrentUsers[chat_id].is_handling = False
+    mutex.release()
 
 def url_add(update: Update, context: CallbackContext) -> int:
     url = update.message.text
@@ -278,14 +382,16 @@ def url_add(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
         return TRADERURL2
     myDriver.quit()
+    mutex.acquire()
     CurrentUsers[update.message.chat_id].is_handling = True
+    mutex.release()
     t1 = threading.Thread(target=addTraderThread,args=(url,update.message.chat_id,update.message.from_user.first_name))
     t1.start()
     return ConversationHandler.END
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)')
+    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/end: End the service.')
 
 def split(a, n):
     if n==0:
@@ -398,6 +504,7 @@ def main() -> None:
         entry_points=[CommandHandler('start', start)],
         states={
             AUTH: [MessageHandler(Filters.text & ~Filters.command, auth_check)],
+            DISCLAIMER:[MessageHandler(Filters.regex('^(yes)$'),disclaimer_check)],
             TRADERURL: [MessageHandler(Filters.text, url_check)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
