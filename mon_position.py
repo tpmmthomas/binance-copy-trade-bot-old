@@ -80,13 +80,7 @@ class FetchLatestPosition(threading.Thread):
         self.num_no_data = 0
         self.chat_id = chat_id
         self.name = name
-        while True:
-            try:
-                self.driver = webdriver.Chrome(cfg.driver_location,options=options)
-                break
-            except: 
-                time.sleep(0.1)
-                continue
+        self.driver = None
         self.first_run = True
 
     def changes(self,df,df2):
@@ -195,11 +189,17 @@ class FetchLatestPosition(threading.Thread):
             txs = pd.DataFrame({"txType":txtype,"symbol":txsymbol,"size":txsize})
         tosend = "*The following transactions will be executed:*\n"+txs.to_string()+"\n"
         updater.bot.sendMessage(chat_id=self.chat_id,text=tosend,parse_mode=telegram.ParseMode.MARKDOWN)
-
     def run(self):
         print("starting",self.name)
         while not self.isStop.is_set():
             isChanged = False
+            while True:
+                try:
+                    self.driver = webdriver.Chrome(cfg.driver_location,options=options)
+                    break
+                except: 
+                    time.sleep(0.1)
+                    continue
             try:
                 self.driver.get(self.fetch_url)
             except:
@@ -253,8 +253,9 @@ class FetchLatestPosition(threading.Thread):
                     self.changes(self.prev_df,output["data"])
             self.prev_df = output["data"]
             self.first_run = False
+            self.driver.quit()
+            self.driver = None
             time.sleep(60)
-        self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
     def stop(self):
         self.isStop.set()
