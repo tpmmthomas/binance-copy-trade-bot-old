@@ -2,6 +2,7 @@ from telegram.message import Message
 import constants as cnt
 import logging
 
+import telegram
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
     Updater,
@@ -28,7 +29,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-AUTH, TRADERURL, TRADERURL2, TRADERNAME = range(4)
+AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE = range(6)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 mutex = threading.Lock()
@@ -84,6 +85,8 @@ class FetchLatestPosition(threading.Thread):
             except: 
                 time.sleep(0.1)
                 continue
+        self.first_run = True
+        
     def run(self):
         print("starting",self.name)
         while not self.isStop.is_set():
@@ -184,13 +187,14 @@ def start(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("You have already initalized! Please use other commands, or use /end to end current session before initializing another.")
         return ConversationHandler.END
     update.message.reply_text(
-        'Welcome! Before you start, please type in the access code (6 digits).'
+        '*Welcome!* Before you start, please type in the access code (6 digits).',
+        parse_mode=telegram.ParseMode.MARKDOWN
     )
     return AUTH
 
 def auth_check(update: Update, context: CallbackContext) -> int:
     user = update.message.from_user
-    logger.info("%s is doing authentication check.", user.first_name)
+    logger.info("%s is doing authentication check.", update.message.from_user.first_name)
     if update.message.text == cnt.auth_code:
         update.message.reply_text(
             'Great! Please provide a full URL to the trader you want to follow.'
@@ -200,30 +204,37 @@ def auth_check(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("Sorry! The access code is wrong. Type /start again if you need to retry.")
         return ConversationHandler.END
 
+def initTraderThread(url,chat_id):
+    traderName = retrieveUserName(url)
+    CurrentUsers[chat_id] = users(chat_id,url,traderName)
+    updater.bot.sendMessage(
+        chat_id = chat_id,
+        text=f'Thanks! You will start receiving alerts when {traderName} changes positions.\nType /help to view a list of available commands.'
+    )
 
 def url_check(update: Update, context: CallbackContext) -> int:
-    context.user_data['url'] = update.message.text
+    url = update.message.text
+    user = update.message.from_user
+    update.message.reply_text("Please wait...")
+    logger.info("%s has entered the first url.", update.message.from_user.first_name)
     try:
+        a = url.find(".com")
+        b = url.find("fut")
+        url = url[:a+5] + "en" + url[b-1:]
         myDriver = webdriver.Chrome(cfg.driver_location,options=options)
-        myDriver.get(context.user_data['url'])
+        myDriver.get(url)
     except:
         update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
         return TRADERURL
     myDriver.quit()
-    traderName = retrieveUserName(context.user_data['url'])
-    user = update.message.from_user
-    logger.info("%s has entered the first url.", user.first_name)
-    update.message.reply_text(
-        f'Thanks! You will start receiving alerts when {traderName} changes positions.\nType /help to view a list of available commands.', reply_markup=ReplyKeyboardRemove()
-    )
-    CurrentUsers[update.message.chat_id] = users(update.message.chat_id,context.user_data['url'],traderName)
-    
+    t1 = threading.Thread(target=initTraderThread,args=(url,update.message.chat_id))
+    t1.start()
     return ConversationHandler.END
 
 def cancel(update: Update, context: CallbackContext) -> int:
     """Cancels and ends the conversation."""
     user = update.message.from_user
-    logger.info("User %s canceled the conversation.", user.first_name)
+    logger.info("User %s canceled the conversation.", update.message.from_user.first_name)
     update.message.reply_text(
         'Operation canceled.', reply_markup=ReplyKeyboardRemove()
     )
@@ -233,37 +244,48 @@ def add_trader(update: Update, context: CallbackContext) -> int:
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
     update.message.reply_text(
         'Please enter full URL of the trader you want to add.'
     )
     return TRADERURL2
 
+def addTraderThread(url,chat_id,firstname):
+    traderName = retrieveUserName(url)
+    if traderName in CurrentUsers[chat_id].trader_names:
+        updater.bot.sendMessage(chat_id=chat_id,text="You already followed this trader.")
+        return
+    logger.info("%s has added trader %s.", firstname,traderName)
+    updater.bot.sendMessage(
+        chat_id = chat_id,
+        text=f'Thanks! You will start receiving alerts when {traderName} changes positions.'
+    )
+    CurrentUsers[chat_id].add_trader(url,traderName)
+    CurrentUsers[chat_id].is_handling = False
+
 def url_add(update: Update, context: CallbackContext) -> int:
-    context.user_data['url'] = update.message.text
+    url = update.message.text
     update.message.reply_text("Please wait...", reply_markup=ReplyKeyboardRemove())
     try:
+        a = url.find(".com")
+        b = url.find("fut")
+        url = url[:a+5] + "en" + url[b-1:]
         myDriver = webdriver.Chrome(cfg.driver_location,options=options)
-        myDriver.get(context.user_data['url'])
+        myDriver.get(url)
     except:
         update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
         return TRADERURL2
     myDriver.quit()
-    traderName = retrieveUserName(context.user_data['url'])
-    if traderName in CurrentUsers[update.message.chat_id].trader_names:
-        update.message.reply_text("You already followed this trader.")
-        return ConversationHandler.END
-    user = update.message.from_user
-    logger.info("%s has entered the url.", user.first_name)
-    update.message.reply_text(
-        f'Thanks! You will start receiving alerts when {traderName} changes positions.', reply_markup=ReplyKeyboardRemove()
-    )
-    CurrentUsers[update.message.chat_id].add_trader(context.user_data['url'],traderName)
-    
+    CurrentUsers[update.message.chat_id].is_handling = True
+    t1 = threading.Thread(target=addTraderThread,args=(url,update.message.chat_id,update.message.from_user.first_name))
+    t1.start()
     return ConversationHandler.END
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader')
+    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)')
 
 def split(a, n):
     if n==0:
@@ -274,6 +296,9 @@ def split(a, n):
 def delete_trader(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
         return ConversationHandler.END
     listtraders = CurrentUsers[update.message.chat_id].trader_names
     if len(listtraders) == 0:
@@ -288,6 +313,7 @@ def delete_trader(update: Update, context: CallbackContext):
 
 def delTrader(update: Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
+    logger.info("%s deleting trader %s.",update.message.text)
     try:
         idx = user.trader_names.index(update.message.text)
     except:
@@ -300,6 +326,44 @@ def delTrader(update: Update, context: CallbackContext):
     user.threads.pop(idx)
     #update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
+
+def end_all(update:Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return
+    user = CurrentUsers[update.message.chat_id]
+    for thread in user.threads:
+        thread.stop()
+    del CurrentUsers[update.message.chat_id]
+    logger.info("%s ended the service.",update.message.from_user.first_name)
+    update.message.reply_text("Sorry to see you go. You are welcome to set up service again with /start.")
+
+def admin(update:Update, context: CallbackContext):
+    update.message.reply_text("Please enter admin authorization code to continue.")
+    return AUTH2
+
+def auth_check2(update: Update, context: CallbackContext) -> int:
+    user = update.message.from_user
+    logger.info("%s is doing authentication check for admin.", update.message.from_user.first_name)
+    if update.message.text == cnt.admin_code:
+        update.message.reply_text(
+            'Great! Please enter the message that you want to announce to all users. /cancel to cancel.'
+        )
+        return ANNOUNCE
+    else:
+        update.message.reply_text("Sorry! The access code is wrong. Type /admin again if you need to retry.")
+        return ConversationHandler.END
+
+def announce(update: Update, context: CallbackContext):
+    for user in CurrentUsers:
+        updater.bot.sendMessage(chat_id=user,text=update.message.text)
+    logger.info("Message announced for all users.")
+    return ConversationHandler.END
+
+
     
 class users:
     def __init__(self,chat_id,init_trader,trader_name):#,init_proportion,api_key,api_secret):
@@ -311,6 +375,7 @@ class users:
         #self.api_key = api_key
         #self.api_secret = api_secret
         self.threads = []
+        self.is_handling = False
         thr = FetchLatestPosition(init_trader,chat_id,trader_name) 
         thr.start()
         self.threads.append(thr)
@@ -351,11 +416,21 @@ def main() -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
+    conv_handler4 = ConversationHandler(
+        entry_points=[CommandHandler('admin', admin)],
+        states={
+            AUTH2: [MessageHandler(Filters.text & ~Filters.command, auth_check2)],
+            ANNOUNCE: [MessageHandler(Filters.text & ~Filters.command, announce)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler3)
+    dispatcher.add_handler(conv_handler4)
     dispatcher.add_handler(CommandHandler("help", help_command))
+    dispatcher.add_handler(CommandHandler("end",end_all))
 
     #TODO: add /end command
     # Start the Bot
