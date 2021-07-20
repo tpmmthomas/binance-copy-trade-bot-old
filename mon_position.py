@@ -80,7 +80,13 @@ class FetchLatestPosition(threading.Thread):
         self.num_no_data = 0
         self.chat_id = chat_id
         self.name = name
-        self.driver = None
+        while True:
+            try:
+                self.driver = webdriver.Chrome(cfg.driver_location,options=options)
+                break
+            except: 
+                time.sleep(0.1)
+                continue
         self.first_run = True
 
     def changes(self,df,df2):
@@ -193,13 +199,6 @@ class FetchLatestPosition(threading.Thread):
         print("starting",self.name)
         while not self.isStop.is_set():
             isChanged = False
-            while True:
-                try:
-                    self.driver = webdriver.Chrome(cfg.driver_location,options=options)
-                    break
-                except: 
-                    time.sleep(0.1)
-                    continue
             try:
                 self.driver.get(self.fetch_url)
             except:
@@ -253,9 +252,8 @@ class FetchLatestPosition(threading.Thread):
                     self.changes(self.prev_df,output["data"])
             self.prev_df = output["data"]
             self.first_run = False
-            self.driver.quit()
-            self.driver = None
             time.sleep(60)
+        self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
     def stop(self):
         self.isStop.set()
@@ -582,7 +580,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("end",end_all))
     #TODO: add /end command
     # Start the Bot
-    updater.start_polling()
+    
     
     with open("userdata.pickle","rb") as f:
         userdata = pickle.load(f)
@@ -592,7 +590,9 @@ def main() -> None:
         for turl in x["urls"][1:]:
             tname = retrieveUserName(turl)
             CurrentUsers[x["chat_id"]].add_trader(turl,tname)
+            time.sleep(60)
 
+    updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
     # start_polling() is non-blocking and will stop the bot gracefully.
