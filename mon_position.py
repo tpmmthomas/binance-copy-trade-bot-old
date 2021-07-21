@@ -192,7 +192,7 @@ class FetchLatestPosition(threading.Thread):
         tosend = "*The following transactions will be executed:*\n"+txs.to_string()+"\n"
         updater.bot.sendMessage(chat_id=self.chat_id,text=tosend,parse_mode=telegram.ParseMode.MARKDOWN)
     def run(self):
-        print("starting",self.name)
+        logger.info("starting %s",self.name)
         while not self.isStop.is_set():
             isChanged = False
             if self.error >=30:
