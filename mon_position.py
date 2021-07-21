@@ -80,14 +80,10 @@ class FetchLatestPosition(threading.Thread):
         self.num_no_data = 0
         self.chat_id = chat_id
         self.name = name
-        while True:
-            try:
-                self.driver = webdriver.Chrome(cfg.driver_location,options=options)
-                break
-            except: 
-                time.sleep(0.1)
-                continue
+        self.runtimes = 0
+        self.driver = None
         self.first_run = True
+        self.error = 0
 
     def changes(self,df,df2):
         txtype = []
@@ -199,10 +195,26 @@ class FetchLatestPosition(threading.Thread):
         print("starting",self.name)
         while not self.isStop.is_set():
             isChanged = False
-            try:
-                self.driver.get(self.fetch_url)
-            except:
-                continue
+            if self.error >=30:
+                tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
+                logger.info(f"Error found in trader {self.name}.")
+                updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                self.error = 0
+            if self.driver is None:
+                while True:
+                    try:
+                        self.driver = webdriver.Chrome(cfg.driver_location,options=options)
+                        self.driver.get(self.fetch_url)
+                        break
+                    except: 
+                        time.sleep(0.1)
+                        continue
+            else:
+                try:
+                    self.driver.refresh()
+                except:
+                    self.error += 1
+                    continue
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source,features="html.parser")
             x = soup.get_text()
@@ -222,8 +234,14 @@ class FetchLatestPosition(threading.Thread):
                         self.changes(self.prev_df,"x")
                 if self.num_no_data != 1:
                     self.prev_df = "x"
+                    self.first_run = False
                     time.sleep(60)
                 time.sleep(5)
+                self.runtimes += 1
+                if self.runtimes >=15:
+                    self.runtimes = 0
+                    self.driver.quit()
+                    self.driver = None
                 continue
             else:
                 self.num_no_data = 0
@@ -231,8 +249,10 @@ class FetchLatestPosition(threading.Thread):
             try:
                 output = format_results(x,self.driver.page_source)
             except:
+                self.error += 1
                 continue
             if output["data"].empty:
+                self.error += 1
                 continue
             if self.prev_df is None or isinstance(self.prev_df,str):
                 isChanged = True
@@ -241,6 +261,7 @@ class FetchLatestPosition(threading.Thread):
                     toComp = output["data"][["symbol","size","Entry Price"]]
                     prevdf = self.prev_df[["symbol","size","Entry Price"]]
                 except:
+                    self.error += 1
                     continue
                 if not toComp.equals(prevdf):
                     isChanged=True
@@ -252,8 +273,14 @@ class FetchLatestPosition(threading.Thread):
                     self.changes(self.prev_df,output["data"])
             self.prev_df = output["data"]
             self.first_run = False
+            self.runtimes += 1
+            if self.runtimes >=15:
+                self.runtimes = 0
+                self.driver.quit()
+                self.driver = None
             time.sleep(60)
-        self.driver.quit()
+        if self.driver is not None:
+            self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
     def stop(self):
         self.isStop.set()
@@ -435,7 +462,7 @@ def delete_trader(update: Update, context: CallbackContext):
 
 def delTrader(update: Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
-    logger.info("%s deleting trader//.",update.message.text)
+    logger.info("deleting trader %s.",update.message.text)
     try:
         idx = user.trader_names.index(update.message.text)
     except:
@@ -582,15 +609,15 @@ def main() -> None:
     # Start the Bot
     
     
-    with open("userdata.pickle","rb") as f:
-        userdata = pickle.load(f)
-    for x in userdata:
-        tname = retrieveUserName(x["urls"][0])
-        CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
-        for turl in x["urls"][1:]:
-            tname = retrieveUserName(turl)
-            CurrentUsers[x["chat_id"]].add_trader(turl,tname)
-            time.sleep(10)
+    # with open("userdata.pickle","rb") as f:
+    #     userdata = pickle.load(f)
+    # for x in userdata:
+    #     tname = retrieveUserName(x["urls"][0])
+    #     CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
+    #     for turl in x["urls"][1:]:
+    #         tname = retrieveUserName(turl)
+    #         CurrentUsers[x["chat_id"]].add_trader(turl,tname)
+    #         time.sleep(10)
 
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
