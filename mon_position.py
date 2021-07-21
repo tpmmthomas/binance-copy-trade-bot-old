@@ -31,7 +31,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER = range(7)
+AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER = range(8)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 mutex = threading.Lock()
@@ -284,6 +284,13 @@ class FetchLatestPosition(threading.Thread):
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
     def stop(self):
         self.isStop.set()
+    def get_info(self):
+        if self.prev_df is not None:
+            if isinstance(self.prev_df,str):
+                return "No positions."
+            return self.prev_df.to_string()
+        else:
+            return "Error."
 
 def retrieveUserName(url):
     success = False
@@ -434,7 +441,7 @@ def url_add(update: Update, context: CallbackContext) -> int:
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/end: End the service.')
+    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/view : view a trader current position.\n/end: End the service.')
 
 def split(a, n):
     if n==0:
@@ -458,6 +465,36 @@ def delete_trader(update: Update, context: CallbackContext):
         reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
         )
     return TRADERNAME
+
+def view_trader(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to view.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return VIEWTRADER
+
+def view_traderInfo(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    update.message.reply_text(f"{update.message.text}'s current position:")
+    update.message.reply_text(f"{user.threads[idx].get_info()}")
+    #update.message.reply_text(f"Successfully removed {update.message.text}.")
+    return ConversationHandler.END
+
 
 
 def delTrader(update: Update, context: CallbackContext):
@@ -598,26 +635,34 @@ def main() -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
+    conv_handler5 = ConversationHandler(
+        entry_points=[CommandHandler("view",view_trader)],
+        states={
+            VIEWTRADER: [MessageHandler(Filters.text & ~Filters.command, view_traderInfo)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler3)
     dispatcher.add_handler(conv_handler4)
+    dispatcher.add_handler(conv_handler5)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("end",end_all))
     #TODO: add /end command
     # Start the Bot
     
     
-    # with open("userdata.pickle","rb") as f:
-    #     userdata = pickle.load(f)
-    # for x in userdata:
-    #     tname = retrieveUserName(x["urls"][0])
-    #     CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
-    #     for turl in x["urls"][1:]:
-    #         tname = retrieveUserName(turl)
-    #         CurrentUsers[x["chat_id"]].add_trader(turl,tname)
-    #         time.sleep(10)
+    with open("userdata.pickle","rb") as f:
+        userdata = pickle.load(f)
+    for x in userdata:
+        tname = retrieveUserName(x["urls"][0])
+        CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
+        for turl in x["urls"][1:]:
+            tname = retrieveUserName(turl)
+            CurrentUsers[x["chat_id"]].add_trader(turl,tname)
+            time.sleep(10)
 
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
