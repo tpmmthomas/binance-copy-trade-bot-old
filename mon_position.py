@@ -361,7 +361,10 @@ def retrieveUserName(url):
         except: 
             time.sleep(0.1)
             continue
+    numtries = 0
     while not success or name == "No Battle Record Found":
+        if numtries >=5:
+            return None
         try:
             myDriver.get(url)
         except:
@@ -376,7 +379,9 @@ def retrieveUserName(url):
             name = format_username(x,myDriver.page_source)
             success = True
         except:
+            numtries += 1
             continue
+        numtries += 1
     myDriver.quit()
     return name
 
@@ -461,6 +466,12 @@ def add_trader(update: Update, context: CallbackContext) -> int:
 
 def addTraderThread(url,chat_id,firstname):
     traderName = retrieveUserName(url)
+    if traderName is None:
+        updater.bot.sendMessage(chat_id=chat_id,text="Sorry, the URL isn't valid.")
+        mutex.acquire()
+        CurrentUsers[chat_id].is_handling = False
+        mutex.release()
+        return
     if traderName in CurrentUsers[chat_id].trader_names:
         print(traderName,CurrentUsers[chat_id].trader_names)
         updater.bot.sendMessage(chat_id=chat_id,text="You already followed this trader.")

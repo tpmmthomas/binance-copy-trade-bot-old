@@ -41,7 +41,7 @@ options = webdriver.ChromeOptions()
 options.binary_location = cfg.chrome_location
 options.add_argument("--headless")
 options.add_argument("--disable-web-security")
-
+UserLocks = {}
 
 def format_results(x,y):
     words = []
@@ -64,23 +64,27 @@ def format_results(x,y):
     mark_price=words[3::5]
     pnl=words[4::5]
     margin = []
+    calculatedMargin = []
     for i in range(len(mark_price)):
         idx1 = pnl[i].find("(")
         idx2 = pnl[i].find("%")
         percentage = float(pnl[i][idx1+1:idx2].replace(",",""))/100
         if float(entry_price[i].replace(",","")) == 0:
-            margin.append("20x")
+            margin.append("nan")
+            calculatedMargin.append(False)
             continue
         price = (float(mark_price[i].replace(",",""))-float(entry_price[i].replace(",","")))/float(entry_price[i].replace(",",""))
         if percentage == 0 or price == 0:
-            estimated_margin = 20
+            margin.append("nan")
+            calculatedMargin.append(False)
         else:
             estimated_margin = round(percentage/price)
-        margin.append(str(estimated_margin)+"x")
+            calculatedMargin.append(True)
+            margin.append(str(estimated_margin)+"x")
         
     dictx={"symbol":symbol,"size":size,"Entry Price":entry_price,"Mark Price":mark_price,"PNL (ROE%)":pnl,"Estimated Margin":margin}
     df = pd.DataFrame(dictx)
-    return {"time":times,"data":df}
+    return {"time":times,"data":df},calculatedMargin
 
 def format_username(x,y):
     words = []
@@ -448,6 +452,7 @@ def disclaimer_check(update: Update, context: CallbackContext):
 def initTraderThread(url,chat_id):
     traderName = retrieveUserName(url)
     CurrentUsers[chat_id] = users(chat_id,url,traderName)
+    UserLocks[chat_id] = threading.Lock() #when calling binance client, have to use the lock.
     updater.bot.sendMessage(
         chat_id = chat_id,
         text=f'Thanks! You will start receiving alerts when {traderName} changes positions.\nType /help to view a list of available commands.'
@@ -806,6 +811,7 @@ def main() -> None:
     for x in userdata:
         tname = retrieveUserName(x["urls"][0])
         CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
+        UserLocks[x["chat_id"]] = threading.Lock()
         for turl in x["urls"][1:]:
             tname = retrieveUserName(turl)
             CurrentUsers[x["chat_id"]].add_trader(turl,tname)
