@@ -76,7 +76,8 @@ def format_results(x,y):
             estimated_margin = 20
         else:
             estimated_margin = round(percentage/price)
-        margin.append(str(abs(estimated_margin))+"x")
+        margin.append(str(estimated_margin)+"x")
+        
     dictx={"symbol":symbol,"size":size,"Entry Price":entry_price,"Mark Price":mark_price,"PNL (ROE%)":pnl,"Estimated Margin":margin}
     df = pd.DataFrame(dictx)
     return {"time":times,"data":df}
@@ -93,7 +94,7 @@ def format_username(x,y):
     return words[-1]
 
 class FetchLatestPosition(threading.Thread):
-    def __init__(self,fetch_url,chat_id,name):
+    def __init__(self,fetch_url,chat_id,name,toTrade,bclient):
         threading.Thread.__init__(self)
         self.prev_df = None
         self.isStop = threading.Event()
@@ -105,6 +106,10 @@ class FetchLatestPosition(threading.Thread):
         self.driver = None
         self.first_run = True
         self.error = 0
+        self.leverage = 20
+        if toTrade:
+            self.bclient = bclient
+        self.toTrade = toTrade
 
     def changes(self,df,df2):
         txtype = []
@@ -349,7 +354,36 @@ class FetchLatestPosition(threading.Thread):
             return self.prev_df.to_string()
         else:
             return "Error."
+    def reload(self):
+        allsymbols = CurrentUsers[self.chat_id].bclient.get_symbols()
+        secondProportion = {}
+        for symbol in allsymbols:
+            if symbol in self.proportion:
+                secondProportion[symbol] = self.proportion[symbol]
+            else:
+                secondProportion[symbol] = 0
+        
 
+    def change_proportion(self,symbol,prop):
+        if symbol not in self.proportion:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
+        self.proportion[symbol] = prop
+        logger.info("Successfully changed proportion.")
+        return
+
+    def get_proportion(self,symbol):
+        if symbol not in self.proportion:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
+            return
+        updater.bot.sendMessage(chat_id=self.chat_id,text=f"The proportion for {symbol} is {self.proportion[symbol]}x.")
+        logger.info("Successfully queried proportion.")
+        return
+    
+    def change_all_proportion(self,prop):
+        for symbol in self.proportion:
+            self.proportion[symbol] = prop
+        logger.info("Successfully changed proportion.")
+        return
 
 def retrieveUserName(url):
     success = False
@@ -625,9 +659,60 @@ def save_to_file(update: Update, context: CallbackContext):
     logger.info("Saved user current state.")
     return ConversationHandler.END
 
-class users:
-    def __init__(self,chat_id,init_trader,trader_name):
+class BinanceClient:
+    def __init__(self,chat_id,api_key,api_secret):
+        self.client = Client(api_key,api_secret)
         self.chat_id = chat_id
+        self.precision = {}
+        info = self.client.futures_exchange_info()
+        try:
+            self.client.futures_change_position_mode(dualSidePosition=True)
+        except BinanceAPIException as e:
+            logger.error(e)
+        for thing in info['symbols']:
+            self.precision[thing['symbol']] = thing['quantityPrecision']
+        try:
+            for symbol in self.precision:
+                self.client.futures_change_margin_type(symbol=symbol,marginType="CROSSED")
+        except BinanceAPIException as e:
+            logger.error(e)
+
+    def get_symbols(self):
+        self.reload()
+        symbolList = []
+        for symbol in self.precision:
+            symbolList.append(symbol)
+        return symbolList
+
+    def open_trade(self,df):
+        df = df.values
+        for tradeinfo in df:
+            types = tradeinfo[0].upper()
+            if types[:3] == "BUY":
+                side = types[:3]
+                positionSide = types[3:]
+            else:
+                side = types[:4]
+                positionSide = types[4:]
+            quant = tradeinfo[2] * self.proportion[tradeinfo[1]]
+            if quant == 0:
+                continue
+            try:
+                self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+            except BinanceAPIException as e:
+                logger.error(e)
+
+    def reload(self):
+        info = self.client.futures_exchange_info()
+        secondPrecision = {}
+        for thing in info['symbols']:
+            secondPrecision[thing['symbol']] = thing['quantityPrecision']
+        self.precision = secondPrecision          
+
+class users:
+    def __init__(self,chat_id,init_trader,trader_name,toTrade,api_key=None,api_secret=None):
+        self.chat_id = chat_id
+        self.toTrade = toTrade
         self.trader_urls = [init_trader]
         self.trader_names = [trader_name] 
         self.threads = []
@@ -635,6 +720,9 @@ class users:
         thr = FetchLatestPosition(init_trader,chat_id,trader_name) 
         thr.start()
         self.threads.append(thr)
+        if toTrade:
+            self.bclient = BinanceClient(chat_id,api_key,api_secret)
+            self.opened_positions = []
 
     def add_trader(self,url,name):
         self.trader_urls.append(url)
@@ -648,6 +736,9 @@ class users:
         self.trader_names.pop(idx)
         self.threads[idx].stop()
         self.threads.pop(idx)
+
+    def update_positions(self,pos):
+        return
 
 
 def main() -> None:
