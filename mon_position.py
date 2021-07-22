@@ -724,6 +724,8 @@ def main() -> None:
     with open("userdata.pickle","rb") as f:
         userdata = pickle.load(f)
     for x in userdata:
+        if len(x["urls"]) == 0:
+            continue
         tname = retrieveUserName(x["urls"][0])
         CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
         for turl in x["urls"][1:]:
