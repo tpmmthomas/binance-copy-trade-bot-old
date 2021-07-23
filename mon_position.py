@@ -718,7 +718,7 @@ def url_add(update: Update, context: CallbackContext) -> int:
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('***GERNERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
+    update.message.reply_text('***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
 
 def split(a, n):
     if n==0:
@@ -1210,7 +1210,7 @@ class BinanceClient:
             else:
                 side = types[:4]
                 positionSide = types[4:]
-            quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
+            quant = tradeinfo[2] * proportion[tradeinfo[1]]
             allquant.append(quant)
             checkKey = tradeinfo[1].upper()+positionSide
             if side == "SELL" and ((checkKey not in positions) or (positions[checkKey] < quant)):
@@ -1248,11 +1248,13 @@ class BinanceClient:
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant =  "{:0.0{}f}".format(quant,reqstepsize)
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
+            if positionSide == "SHORT":
+                side = "BUY" if side == "SELL" else "SELL" # turns out have to reverse it, do it here for least 
             if tmode == 0:
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+                    #self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
                     logger.info(f"{self.uname} opened order.")
                 except BinanceAPIException as e:
                     logger.error(e)
@@ -1269,7 +1271,7 @@ class BinanceClient:
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
+                    #self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
                     logger.info(f"{self.uname} opened order.")
                 except BinanceAPIException as e:
                     logger.error(e)
