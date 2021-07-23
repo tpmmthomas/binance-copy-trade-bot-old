@@ -98,7 +98,7 @@ def format_username(x,y):
     return words[-1]
 
 class FetchLatestPosition(threading.Thread):
-    def __init__(self,listSymbols,fetch_url,chat_id,name,uname,toTrade,tmode=None,lmode=None,proportion={},leverage={},positions={}):
+    def __init__(self,listSymbols,fetch_url,chat_id,name,uname,toTrade,tmode=None,lmode=None,proportion=None,leverage=None,positions=None):
         threading.Thread.__init__(self)
         self.prev_df = None
         self.isStop = threading.Event()
@@ -113,9 +113,15 @@ class FetchLatestPosition(threading.Thread):
         self.error = 0
         self.toTrade = toTrade
         self.positions= positions
+        if self.positions is None:
+            self.positions = {}
         if toTrade:
             self.proportion = proportion
             self.leverage = leverage
+            if self.proportion is None:
+                self.proportion = {}
+            if self.leverage is None:
+                self.leverage = {}
             self.tmode = tmode
             self.lmode = lmode
             for symbol in listSymbols:

@@ -16,7 +16,7 @@ pip install -r requirements.txt
 3. Setup a telegram bot using `Botfather` (details on telegram official site) and mark the access token.
 4. `mv constants_sample.py constants.py` and fill in the required fields
 5. Fill in the required fields at `config/config.py`
-6. Run `mon_position.py`
+6. Run `mon_position.py` (Suggest to set it up as a service with systemctl, lots of tutorials available online.)
 
 ### Disclaimer
 
