@@ -1210,7 +1210,7 @@ class BinanceClient:
             else:
                 side = types[:4]
                 positionSide = types[4:]
-            quant = tradeinfo[2] * proportion[tradeinfo[1]]
+            quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
             allquant.append(quant)
             checkKey = tradeinfo[1].upper()+positionSide
             if side == "SELL" and ((checkKey not in positions) or (positions[checkKey] < quant)):
@@ -1254,7 +1254,7 @@ class BinanceClient:
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    #self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
                     logger.info(f"{self.uname} opened order.")
                 except BinanceAPIException as e:
                     logger.error(e)
@@ -1271,7 +1271,7 @@ class BinanceClient:
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    #self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
+                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
                     logger.info(f"{self.uname} opened order.")
                 except BinanceAPIException as e:
                     logger.error(e)
