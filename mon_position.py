@@ -119,10 +119,8 @@ class FetchLatestPosition(threading.Thread):
             self.tmode = tmode
             self.lmode = lmode
             for symbol in listSymbols:
-                if symbol not in self.proportion:
-                    self.proportion[symbol] = 0
-                if symbol not in self.leverage:
-                    self.leverage[symbol] = 20
+                self.proportion[symbol] = 0
+                self.leverage[symbol] = 20
     
     def get_trader_profile(self):
         if self.toTrade:
@@ -1447,12 +1445,12 @@ def main() -> None:
     # Start the Bot
     
     
-    with open("userdata.pickle","rb") as f:
-        userdata = pickle.load(f)
-    for x in userdata:
-        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, the updated software is online. You can play around with all the settings and commands (and I actually encourage it to help me discover bugs), just don't use your real api key and you will be safe.")
-    t1 = threading.Thread(target=automatic_reload)
-    t1.start()
+    # with open("userdata.pickle","rb") as f:
+    #     userdata = pickle.load(f)
+    # for x in userdata:
+    #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, the updated software is online. You can play around with all the settings and commands (and I actually encourage it to help me discover bugs), just don't use your real api key and you will be safe.")
+    # t1 = threading.Thread(target=automatic_reload)
+    # t1.start()
 
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
