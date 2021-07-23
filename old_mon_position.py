@@ -253,6 +253,7 @@ class FetchLatestPosition(threading.Thread):
         logger.info("starting %s",self.name)
         while not self.isStop.is_set():
             isChanged = False
+            time.sleep(self.error*2)
             if self.error >=30:
                 tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
                 logger.info(f"Error found in trader {self.name}.")

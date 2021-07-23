@@ -1,4 +1,4 @@
-from telegram.message import Message
+from numpy import add
 import constants as cnt
 import logging
 
@@ -20,9 +20,9 @@ from bs4 import BeautifulSoup
 import threading
 from datetime import datetime
 import pickle
-import queue
 from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceOrderException
+import math
 
 import urllib3
 urllib3.disable_warnings()
@@ -33,7 +33,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER = range(8)
+AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2= range(23)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 mutex = threading.Lock()
@@ -78,7 +78,7 @@ def format_results(x,y):
             margin.append("nan")
             calculatedMargin.append(False)
         else:
-            estimated_margin = round(percentage/price)
+            estimated_margin = abs(round(percentage/price))
             calculatedMargin.append(True)
             margin.append(str(estimated_margin)+"x")
         
@@ -98,7 +98,7 @@ def format_username(x,y):
     return words[-1]
 
 class FetchLatestPosition(threading.Thread):
-    def __init__(self,fetch_url,chat_id,name,toTrade,bclient):
+    def __init__(self,listSymbols,fetch_url,chat_id,name,uname,toTrade,tmode=None,lmode=None,proportion={},leverage={},positions={}):
         threading.Thread.__init__(self)
         self.prev_df = None
         self.isStop = threading.Event()
@@ -106,14 +106,28 @@ class FetchLatestPosition(threading.Thread):
         self.num_no_data = 0
         self.chat_id = chat_id
         self.name = name
+        self.uname = uname
         self.runtimes = 0
         self.driver = None
         self.first_run = True
         self.error = 0
-        self.leverage = 20
-        if toTrade:
-            self.bclient = bclient
         self.toTrade = toTrade
+        self.positions= positions
+        if toTrade:
+            self.proportion = proportion
+            self.leverage = leverage
+            self.tmode = tmode
+            self.lmode = lmode
+            for symbol in listSymbols:
+                if symbol not in self.proportion:
+                    self.proportion[symbol] = 0
+                if symbol not in self.leverage:
+                    self.leverage[symbol] = 20
+    
+    def get_trader_profile(self):
+        if self.toTrade:
+            return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmode":self.tmode,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
+        return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade}
 
     def changes(self,df,df2):
         txtype = []
@@ -256,15 +270,17 @@ class FetchLatestPosition(threading.Thread):
                     txsize.append(size)
                     executePrice.append(row['Entry Price'])
             txs = pd.DataFrame({"txType":txtype,"symbol":txsymbol,"size":txsize,"ExecPrice":executePrice})
-        tosend = "*The following transactions will be executed:*\n"+txs.to_string()+"\n"
+        tosend = f"*The positions changed by the trader {self.name}:*\n"+txs.to_string()+"\n"
         updater.bot.sendMessage(chat_id=self.chat_id,text=tosend,parse_mode=telegram.ParseMode.MARKDOWN)
+        return txs
+
     def run(self):
-        logger.info("starting %s",self.name)
+        logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
             if self.error >=30:
                 tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
-                logger.info(f"Error found in trader {self.name}.")
+                logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 self.error = 0
             if self.driver is None:
@@ -298,7 +314,21 @@ class FetchLatestPosition(threading.Thread):
                     tosend = f"Trader {self.name}, Current time: "+str(now)+"\nNo positions.\n"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                     if not self.first_run:
-                        self.changes(self.prev_df,"x")
+                        txlist = self.changes(self.prev_df,"x")
+                        if self.toTrade:
+                            UserLocks[self.chat_id].acquire()
+                            quants = CurrentUsers[self.chat_id].bclient.open_trade(txlist,self.proportion,self.leverage,self.lmode,self.tmode,self.positions)
+                            UserLocks[self.chat_id].release()
+                            for i,tradeinfo in enumerate(txlist.values):
+                                if tradeinfo[0][:3] == "Buy":
+                                    posKey = tradeinfo[1].upper()+tradeinfo[0][3:].upper()
+                                    if posKey not in self.positions:
+                                        self.positions[posKey] = quants[i]
+                                    else:
+                                        self.positions[posKey] += quants[i]
+                                else:
+                                    if posKey in self.positions:
+                                        self.positions[posKey] -= quants[i]
                 if self.num_no_data != 1:
                     self.prev_df = "x"
                     self.first_run = False
@@ -314,13 +344,19 @@ class FetchLatestPosition(threading.Thread):
                 self.num_no_data = 0
             #######################################################################
             try:
-                output = format_results(x,self.driver.page_source)
+                output,calmargin = format_results(x,self.driver.page_source)
             except:
                 self.error += 1
                 continue
             if output["data"].empty:
                 self.error += 1
                 continue
+            if self.toTrade and self.lmode == 0:
+                symbols = output["data"]["symbol"].values
+                margins = output["data"]["Estimated Margin"].values
+                for i,mask in enumerate(calmargin):
+                    if mask:
+                        self.leverage[symbols[i]] = int(margins[i][:-1])
             if self.prev_df is None or isinstance(self.prev_df,str):
                 isChanged = True
             else:
@@ -337,7 +373,22 @@ class FetchLatestPosition(threading.Thread):
                 tosend = f"Trader {self.name}, Current time: "+str(now)+"\n"+output["time"]+"\n"+output["data"].to_string()+"\n"
                 updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 if not self.first_run:
-                    self.changes(self.prev_df,output["data"])
+                    txlist = self.changes(self.prev_df,output["data"])
+                    if self.toTrade:
+                        UserLocks[self.chat_id].acquire()
+                        quants = CurrentUsers[self.chat_id].bclient.open_trade(txlist,self.proportion,self.leverage,self.lmode,self.tmode,self.positions)
+                        UserLocks[self.chat_id].release()
+                        for i,tradeinfo in enumerate(txlist.values):
+                            if tradeinfo[0][:3] == "Buy":
+                                posKey = tradeinfo[1].upper()+tradeinfo[0][3:].upper()
+                                if posKey not in self.positions:
+                                    self.positions[posKey] = quants[i]
+                                else:
+                                    self.positions[posKey] += quants[i]
+                            else:
+                                posKey = tradeinfo[1].upper()+tradeinfo[0][4:].upper()
+                                if posKey in self.positions:
+                                    self.positions[posKey] -= quants[i]
             self.prev_df = output["data"]
             self.first_run = False
             self.runtimes += 1
@@ -349,8 +400,10 @@ class FetchLatestPosition(threading.Thread):
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
+
     def stop(self):
         self.isStop.set()
+
     def get_info(self):
         if self.prev_df is not None:
             if isinstance(self.prev_df,str):
@@ -358,35 +411,79 @@ class FetchLatestPosition(threading.Thread):
             return self.prev_df.to_string()
         else:
             return "Error."
+
     def reload(self):
+        if not self.toTrade:
+            return
         allsymbols = CurrentUsers[self.chat_id].bclient.get_symbols()
         secondProportion = {}
+        secondLeverage = {}
         for symbol in allsymbols:
             if symbol in self.proportion:
                 secondProportion[symbol] = self.proportion[symbol]
+                secondLeverage[symbol] = self.leverage[symbol]
             else:
                 secondProportion[symbol] = 0
-        
+                secondLeverage[symbol] = 20
+        self.proportion = secondProportion
+        self.leverage = secondLeverage
 
     def change_proportion(self,symbol,prop):
         if symbol not in self.proportion:
             updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
         self.proportion[symbol] = prop
-        logger.info("Successfully changed proportion.")
+        logger.info(f"{self.uname} Successfully changed proportion.")
+        updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully changed proportion!")
         return
 
     def get_proportion(self,symbol):
         if symbol not in self.proportion:
             updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
             return
-        updater.bot.sendMessage(chat_id=self.chat_id,text=f"The proportion for {symbol} is {self.proportion[symbol]}x.")
-        logger.info("Successfully queried proportion.")
-        return
+        #updater.bot.sendMessage(chat_id=self.chat_id,text=f"The proportion for {symbol} is {self.proportion[symbol]}x.")
+        logger.info(f"{self.uname} Successfully queried proportion.")
+        return self.proportion[symbol]
     
     def change_all_proportion(self,prop):
         for symbol in self.proportion:
             self.proportion[symbol] = prop
-        logger.info("Successfully changed proportion.")
+        logger.info(f"{self.uname} Successfully changed all proportion.")
+        updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully changed proportion!")
+        return
+    
+    def change_leverage(self,symbol,lev):
+        if symbol not in self.leverage:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
+        try:
+            lev = int(lev)
+            assert lev>=1 and lev<=125
+        except:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but the leverage must be an integer between 1 and 125.")
+            return
+        self.leverage[symbol] = lev
+        logger.info(f"{self.uname} Successfully changed leverage.")
+        updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed leverage!")
+        return
+
+    def get_leverage(self,symbol):
+        if symbol not in self.leverage:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
+            return
+        #updater.bot.sendMessage(chat_id=self.chat_id,text=f"The leverage for {symbol} is {self.leverage[symbol]}x.")
+        logger.info(f"{self.uname} Successfully queried leverage.")
+        return self.leverage[symbol]
+    
+    def change_all_leverage(self,lev):
+        try:
+            lev = int(lev)
+            assert lev>=1 and lev<=125
+        except:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but the leverage must be an integer between 1 and 125.")
+            return
+        for symbol in self.leverage:
+            self.leverage[symbol] = lev
+        logger.info(f"{self.uname} Successfully changed all leverage.")
+        updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed leverage!")
         return
 
 def retrieveUserName(url):
@@ -423,9 +520,10 @@ def start(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("You have already initalized! Please use other commands, or use /end to end current session before initializing another.")
         return ConversationHandler.END
     update.message.reply_text(
-        '*Welcome!* Before you start, please type in the access code (6 digits).',
+        f'*Welcome {update.message.from_user.first_name}!* Before you start, please type in the access code (6 digits).',
         parse_mode=telegram.ParseMode.MARKDOWN
     )
+    context.user_data['uname'] = update.message.from_user.first_name
     return AUTH
 
 def auth_check(update: Update, context: CallbackContext) -> int:
@@ -446,17 +544,34 @@ Type "yes" (lowercase) if you agree. Otherwise type /cancel and exit.',
 
 def disclaimer_check(update: Update, context: CallbackContext):
     logger.info("%s has agreed to the disclaimer.", update.message.from_user.first_name)
-    update.message.reply_text("Please provide a full URL to the trader you want to follow.")
-    return TRADERURL
+    update.message.reply_text("Please provide your API Key from Binance.")
+    update.message.reply_text("*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",parse_mode=telegram.ParseMode.MARKDOWN)
+    return APIKEY
 
-def initTraderThread(url,chat_id):
-    traderName = retrieveUserName(url)
-    CurrentUsers[chat_id] = users(chat_id,url,traderName)
+def check_api(update: Update, context: CallbackContext):
+    context.user_data['api_key'] = update.message.text
+    update.message.reply_text("Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",parse_mode=telegram.ParseMode.MARKDOWN) 
+    return APISECRET
+
+def check_secret(update: Update, context: CallbackContext):
+    context.user_data['api_secret'] = update.message.text
+    update.message.reply_text("Now, please provide full URL of the trader you want to follow.")
+    return TRADERURL 
+
+def initTraderThread(chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade,tmode,lmode):
     UserLocks[chat_id] = threading.Lock() #when calling binance client, have to use the lock.
+    if toTrade:
+        CurrentUsers[chat_id] = users(chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade,tmode,lmode)
+    else:
+        CurrentUsers[chat_id] = users(chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade)
+    
     updater.bot.sendMessage(
         chat_id = chat_id,
-        text=f'Thanks! You will start receiving alerts when {traderName} changes positions.\nType /help to view a list of available commands.'
+        text=f'Thanks! You will start receiving alerts when {trader_name} changes positions.\nHere is a list of available commands:'
     )
+    updater.bot.sendMessage(chat_id = chat_id,text='***GERNERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
+    if toTrade:
+        updater.bot.sendMessage(chat_id= chat_id, text="*All your proportions have been set to 0x and all leverage has ben set to 20x (if applicable). Change these settings with extreme caution.*",parse_mode=telegram.ParseMode.MARKDOWN)
 
 def url_check(update: Update, context: CallbackContext) -> int:
     url = update.message.text
@@ -473,8 +588,56 @@ def url_check(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
         return TRADERURL
     myDriver.quit()
-    t1 = threading.Thread(target=initTraderThread,args=(url,update.message.chat_id))
-    t1.start()
+    traderName = retrieveUserName(url)
+    if traderName is None:
+        update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
+        return TRADERURL
+    context.user_data['url'] = url
+    context.user_data['name'] = traderName
+    context.user_data["First"] = True
+    update.message.reply_text(f"Do you want us to copy the positions of {traderName} automatically, or do you only want to follow and get alerts?") 
+    update.message.reply_text("Pick 'yes' to set up copy trade, 'no' to just follow.",
+        reply_markup=ReplyKeyboardMarkup([['yes','no']],one_time_keyboard=True)
+    )
+    return TOTRADE
+
+def trade_confirm(update: Update, context: CallbackContext):
+    response = update.message.text
+    if response == "yes":
+        context.user_data['toTrade'] = True
+    else:
+        context.user_data['toTrade'] = False
+        if context.user_data['First']:
+            t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],-1,-1))###CEHCK
+            t1.start()
+        else:
+            t1 = threading.Thread(target=addTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['toTrade'],-1,-1))
+            t1.start()
+        return ConversationHandler.END
+    update.message.reply_text("Please select the trading mode:")
+    update.message.reply_text("0. MARKET: Once we detected a change in position, you will make an order immediately at the market price. As a result, your entry price might deviate from the trader's entry price (especially when there are significant market movements).") 
+    update.message.reply_text("1. LIMIT: You will make an limit order at the same price as the trader's estimated entry price. However, due to fluctuating market movements, your order might not be fulfilled.")
+    update.message.reply_text("Please type 0 or 1 to indicate your choice.")
+    return TMODE
+
+def tmode_confirm(update: Update, context: CallbackContext):
+    context.user_data['tmode'] = int(update.message.text)
+    update.message.reply_text("Please select the leverage mode:")
+    update.message.reply_text("0. FOLLOW: You will follow the same leverage as the trader. However, note that the leverage is only an estimate. In case the leverage information cannot be obtained, we would look at the trader's history leverage on the given symbol to determine the leverage. If that was not available as well, a default of 20x leverage would be used.") 
+    update.message.reply_text("1. FIXED: You can fix your own leverage settings within this bot for every (trader,symbol) combination. Once we place an order, the leverage set by you will be used regardless of the trader's leverage. Default is 20x and can be changed later.")
+    update.message.reply_text("2: IGNORE: You will follow the leverage settings on the binance site, we will not attempt to change any leverage settings for you.")
+    update.message.reply_text("Please type 0,1 or 2 to indicate your choice.")
+    return LMODE
+
+def lmode_confirm(update: Update, context: CallbackContext):
+    context.user_data['lmode'] = int(update.message.text)
+    update.message.reply_text("Please wait...")
+    if context.user_data['First']:
+        t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],context.user_data['tmode'],context.user_data['lmode']))###CEHCK
+        t1.start()
+    else:
+        t1 = threading.Thread(target=addTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['toTrade'],context.user_data['tmode'],context.user_data['lmode']))
+        t1.start()
     return ConversationHandler.END
 
 def cancel(update: Update, context: CallbackContext) -> int:
@@ -493,26 +656,25 @@ def add_trader(update: Update, context: CallbackContext) -> int:
     if CurrentUsers[update.message.chat_id].is_handling:
         update.message.reply_text("You are adding another trader, wait for it to complete first!")
         return ConversationHandler.END
+    context.user_data['uname'] = update.message.from_user.first_name
     update.message.reply_text(
         'Please enter full URL of the trader you want to add.'
     )
     return TRADERURL2
 
-def addTraderThread(url,chat_id,firstname):
-    traderName = retrieveUserName(url)
-    if traderName in CurrentUsers[chat_id].trader_names:
-        print(traderName,CurrentUsers[chat_id].trader_names)
+def addTraderThread(chat_id,uname,url,trader_name,toTrade,tmode,lmode):
+    if trader_name in CurrentUsers[chat_id].trader_names:
         updater.bot.sendMessage(chat_id=chat_id,text="You already followed this trader.")
         mutex.acquire()
         CurrentUsers[chat_id].is_handling = False
         mutex.release()
         return
-    logger.info("%s has added trader %s.", firstname,traderName)
+    logger.info("%s has added trader %s.", uname,trader_name)
     updater.bot.sendMessage(
         chat_id = chat_id,
-        text=f'Thanks! You will start receiving alerts when {traderName} changes positions.'
+        text=f'Thanks! You will start receiving alerts when {trader_name} changes positions.'
     )
-    CurrentUsers[chat_id].add_trader(url,traderName)
+    CurrentUsers[chat_id].add_trader(url,trader_name,toTrade,tmode,lmode)
     mutex.acquire()
     CurrentUsers[chat_id].is_handling = False
     mutex.release()
@@ -530,16 +692,30 @@ def url_add(update: Update, context: CallbackContext) -> int:
         update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
         return TRADERURL2
     myDriver.quit()
+    traderName = retrieveUserName(url)
+    if traderName is None:
+        update.message.reply_text("Sorry! Your URL is invalid. Please try entering again.")
+        return TRADERURL2
+    context.user_data['url'] = url
+    context.user_data['name'] = traderName
+    context.user_data['First'] = False
     mutex.acquire()
     CurrentUsers[update.message.chat_id].is_handling = True
     mutex.release()
-    t1 = threading.Thread(target=addTraderThread,args=(url,update.message.chat_id,update.message.from_user.first_name))
-    t1.start()
-    return ConversationHandler.END
+    update.message.reply_text(f"Do you want us to copy the positions of {traderName} automatically, or do you only want to follow and get alerts?") 
+    update.message.reply_text("Pick 'yes' to set up copy trade, 'no' to just follow.",
+        reply_markup=ReplyKeyboardMarkup([['yes','no']],one_time_keyboard=True)
+    )
+    return TOTRADE
+    # 
+    
+    # t1 = threading.Thread(target=addTraderThread,args=(url,update.message.chat_id,update.message.from_user.first_name))
+    # t1.start()
+    # return ConversationHandler.END
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/view : view a trader current position.\n/end: End the service.')
+    update.message.reply_text('***GERNERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
 
 def split(a, n):
     if n==0:
@@ -593,8 +769,6 @@ def view_traderInfo(update: Update, context: CallbackContext):
     #update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
 
-
-
 def delTrader(update: Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
     logger.info("deleting trader %s.",update.message.text)
@@ -631,7 +805,6 @@ def end_everyone(update:Update, context: CallbackContext):
     logger.info("Everyone's service has ended.")
     return ConversationHandler.END
     
-
 def admin(update:Update, context: CallbackContext):
     update.message.reply_text("Please enter admin authorization code to continue.")
     return AUTH2
@@ -658,26 +831,355 @@ def save_to_file(update: Update, context: CallbackContext):
     save_items = []
     for user in CurrentUsers:
         user = CurrentUsers[user]
-        save_items.append({"chat_id":user.chat_id,"urls":user.trader_urls})
+        traderProfiles = []
+        for trader in user.threads:
+            traderProfiles.append(trader.get_trader_profile())
+        save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
     with open("userdata.pickle",'wb') as f:
         pickle.dump(save_items,f)
     logger.info("Saved user current state.")
     return ConversationHandler.END
 
+def automatic_reload():
+    while True:
+        time.sleep(60*60*24)
+        for users in CurrentUsers:
+            UserLocks[users].acquire()
+            CurrentUsers[users].bclient.reload()
+            UserLocks[users].release()
+        save_to_file(None,None)
+    
+def set_all_leverage(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set leverage for all symbols.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return ALLLEV
+
+def setAllLeverage(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} adjusting leverage.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    update.message.reply_text("Please enter the target leverage (Integer between 1 and 125)")
+    return REALSETLEV
+
+def setAllLeverageReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        lev = int(update.message.text)
+        assert lev>=1 and lev<=125
+    except:
+        update.message.reply_text("This is not a valid leverage, please enter again.")
+        return REALSETLEV
+    idx = context.user_data['idx'] 
+    user.threads[idx].change_all_leverage(lev)
+    return ConversationHandler.END
+
+def set_leverage(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set leverage for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return LEVTRADER
+
+def leverage_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} adjusting leverage.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text("Please choose the symbol to set.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+    return LEVSYM
+
+def leverage_choosesymbol(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    context.user_data['symbol'] = update.message.text
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    if update.message.text not in listsymbols:
+        listsymbols = [[x] for x in listsymbols]
+        update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+        return LEVSYM
+    update.message.reply_text("Please enter the target leverage (Integer between 1 and 125)")
+    return REALSETLEV2
+
+def setLeverageReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        lev = int(update.message.text)
+        assert lev>=1 and lev<=125
+    except:
+        update.message.reply_text("This is not a valid leverage, please enter again.")
+        return REALSETLEV
+    idx = context.user_data['idx'] 
+    symbol = context.user_data['symbol']
+    user.threads[idx].change_leverage(symbol,lev)
+    return ConversationHandler.END
+  
+def set_all_proportion(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set proportion for all symbols.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return ALLPROP
+
+def setAllProportion(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} adjusting proportion.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    update.message.reply_text("Please enter the target proportion.")
+    return REALSETPROP
+
+def setAllProportionReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        prop = float(update.message.text)
+        assert prop >=0
+    except:
+        update.message.reply_text("This is not a valid proportion, please enter again.")
+        return REALSETLEV
+    idx = context.user_data['idx'] 
+    user.threads[idx].change_all_proportion(prop)
+    return ConversationHandler.END
+
+def set_proportion(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set proportion for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return PROPTRADER
+
+def proportion_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} adjusting proportion.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text("Please choose the symbol to set.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+    return PROPSYM
+
+def proportion_choosesymbol(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    context.user_data['symbol'] = update.message.text
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    if update.message.text not in listsymbols:
+        listsymbols = [[x] for x in listsymbols]
+        update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+        return PROPSYM
+    update.message.reply_text("Please enter the target proportion.")
+    return REALSETPROP2
+
+def setProportionReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        prop = float(update.message.text)
+        assert prop >=0
+    except:
+        update.message.reply_text("This is not a valid proportion, please enter again.")
+        return 
+    idx = context.user_data['idx'] 
+    symbol = context.user_data['symbol']
+    user.threads[idx].change_proportion(symbol,prop)
+    return ConversationHandler.END
+
+def get_leverage(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to query leverage for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return LEVTRADER
+
+def getleverage_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} querying leverage.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text("Please choose the symbol.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+    return REALSETLEV2
+
+def getLeverageReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    symbol = update.message.text
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    if symbol not in listsymbols:
+        listsymbols = [[x] for x in listsymbols]
+        update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+        return LEVSYM
+    idx = context.user_data['idx']
+    result = user.threads[idx].get_leverage(symbol)
+    update.message.reply_text(f"The leverage set for {user.threads[idx].name}, {symbol} is {result}x.")
+    return ConversationHandler.END
+  
+def get_proportion(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to query proportion for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return LEVTRADER
+
+def getproportion_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} querying proportion.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text("Please choose the symbol.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+    return REALSETLEV2
+
+def getproportionReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    symbol = update.message.text
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    if symbol not in listsymbols:
+        listsymbols = [[x] for x in listsymbols]
+        update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+        return LEVSYM
+    idx = context.user_data['idx']
+    result = user.threads[idx].get_proportion(symbol)
+    update.message.reply_text(f"The proportion set for {user.threads[idx].name}, {symbol} is {result}x.")
+    return ConversationHandler.END
+  
 class BinanceClient:
-    def __init__(self,chat_id,api_key,api_secret):
+    def __init__(self,chat_id,uname,api_key,api_secret):
         self.client = Client(api_key,api_secret)
         self.chat_id = chat_id
-        self.precision = {}
+        self.uname = uname
+        self.stepsize = {}
+        self.ticksize = {}
         info = self.client.futures_exchange_info()
         try:
             self.client.futures_change_position_mode(dualSidePosition=True)
         except BinanceAPIException as e:
             logger.error(e)
         for thing in info['symbols']:
-            self.precision[thing['symbol']] = thing['quantityPrecision']
+            self.ticksize[thing['symbol']] = round(-math.log(float(thing['filters'][0]['tickSize']),10))
+            self.stepsize[thing['symbol']] = round(-math.log(float(thing['filters'][1]['stepSize']),10))
         try:
-            for symbol in self.precision:
+            for symbol in self.ticksize:
                 self.client.futures_change_margin_type(symbol=symbol,marginType="CROSSED")
         except BinanceAPIException as e:
             logger.error(e)
@@ -685,54 +1187,128 @@ class BinanceClient:
     def get_symbols(self):
         self.reload()
         symbolList = []
-        for symbol in self.precision:
+        for symbol in self.stepsize:
             symbolList.append(symbol)
         return symbolList
 
-    def open_trade(self,df):
+    def open_trade(self,df,proportion,leverage,lmode,tmode,positions):
         df = df.values
+        allquant = []
         for tradeinfo in df:
             types = tradeinfo[0].upper()
             if types[:3] == "BUY":
                 side = types[:3]
                 positionSide = types[3:]
+                if lmode != 2:
+                    try:
+                        self.client.futures_change_leverage(symbol=tradeinfo[1],leverage=leverage[tradeinfo[1]])
+                    except:
+                        pass
             else:
                 side = types[:4]
                 positionSide = types[4:]
-            quant = tradeinfo[2] * self.proportion[tradeinfo[1]]
-            if quant == 0:
+            quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
+            allquant.append(quant)
+            checkKey = tradeinfo[1].upper()+positionSide
+            if side == "SELL" and ((checkKey not in positions) or (positions[checkKey] < quant)):
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Sell {checkKey}: This trade will not be executed because your opened positions with this trader is less than the quantity.")
                 continue
+            if quant == 0:
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Buy {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
+                continue
+            balance,collateral,coin = 0,0,""
             try:
-                self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+                if tradeinfo[1].find("USDT") != 0:
+                    coin = "USDT"
+                    for asset in self.client.futures_account()["assets"]:
+                        if asset['asset'] == "USDT":
+                            balance = asset['maxWithdrawAmount']
+                            break
+                elif tradeinfo[1].find("BUSD") != 0:
+                    coin = "BUSD"
+                    for asset in self.client.futures_account()["assets"]:
+                        if asset['asset'] == "BUSD":
+                            balance = asset['maxWithdrawAmount']
+                            break
             except BinanceAPIException as e:
-                logger.error(e)
+                coin = "USDT"
+                balance = "0"
+                logger.error(e) 
+            balance = float(balance)
+            latest_price = float(self.client.futures_mark_price(symbol=tradeinfo[1])['markPrice'])
+            collateral = (latest_price * quant) / leverage[tradeinfo[1]]
+            if side == "BUY":
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.")
+                if collateral >= (balance/5):
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than 20% of your available balance. Manage your risks accordingly and reduce proportion if necessary.")
+            reqticksize = self.ticksize[tradeinfo[1]]
+            reqstepsize = self.stepsize[tradeinfo[1]]
+            quant =  "{:0.0{}f}".format(quant,reqstepsize)
+            target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
+            if tmode == 0:
+                try:
+                    tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+                    logger.info(f"{self.uname} opened order.")
+                except BinanceAPIException as e:
+                    logger.error(e)
+            else:
+                try:
+                    target_price = float(target_price)
+                    if positionSide == "LONG":
+                        target_price = min(latest_price,target_price) 
+                    else:
+                        target_price = max(latest_price,target_price)
+                except:
+                    pass
+                target_price = "{:0.0{}f}".format(float(target_price),reqticksize)
+                try:
+                    tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
+                    logger.info(f"{self.uname} opened order.")
+                except BinanceAPIException as e:
+                    logger.error(e)
+        return allquant
 
     def reload(self):
         info = self.client.futures_exchange_info()
-        secondPrecision = {}
+        secondticksize = {}
+        secondstepsize = {}
         for thing in info['symbols']:
-            secondPrecision[thing['symbol']] = thing['quantityPrecision']
-        self.precision = secondPrecision          
+            secondticksize[thing['symbol']] = round(-math.log(float(thing['filters'][0]['tickSize']),10))
+            secondstepsize[thing['symbol']] = round(-math.log(float(thing['filters'][1]['stepSize']),10))
+        self.ticksize = secondticksize
+        self.stepsize = secondstepsize 
 
 class users:
-    def __init__(self,chat_id,init_trader,trader_name,toTrade,api_key=None,api_secret=None):
+    def __init__(self,chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None):
         self.chat_id = chat_id
-        self.toTrade = toTrade
         self.trader_urls = [init_trader]
         self.trader_names = [trader_name] 
         self.threads = []
         self.is_handling = False
-        thr = FetchLatestPosition(init_trader,chat_id,trader_name) 
+        self.uname = uname
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.bclient = BinanceClient(chat_id,uname,api_key,api_secret)
+        listsymbols = self.bclient.get_symbols()
+        if toTrade:
+            thr = FetchLatestPosition(listsymbols,init_trader,chat_id,trader_name,uname,toTrade,tmode,lmode) 
+        else:
+            thr = FetchLatestPosition(listsymbols,init_trader,chat_id,trader_name,uname,toTrade)
         thr.start()
         self.threads.append(thr)
-        if toTrade:
-            self.bclient = BinanceClient(chat_id,api_key,api_secret)
-            self.opened_positions = []
 
-    def add_trader(self,url,name):
+    def add_trader(self,url,name,toTrade,tmode=None,lmode=None):
         self.trader_urls.append(url)
         self.trader_names.append(name)
-        thr = FetchLatestPosition(url,self.chat_id,name)
+        listsymbols = self.bclient.get_symbols()
+        if toTrade:
+            thr = FetchLatestPosition(listsymbols,url,self.chat_id,name,self.uname,toTrade,tmode,lmode)
+        else:
+            thr = FetchLatestPosition(listsymbols,url,self.chat_id,name,self.uname,toTrade)
         thr.start()
         self.threads.append(thr)
 
@@ -741,10 +1317,6 @@ class users:
         self.trader_names.pop(idx)
         self.threads[idx].stop()
         self.threads.pop(idx)
-
-    def update_positions(self,pos):
-        return
-
 
 def main() -> None:
     """Run the bot."""
@@ -757,7 +1329,12 @@ def main() -> None:
         states={
             AUTH: [MessageHandler(Filters.text & ~Filters.command, auth_check)],
             DISCLAIMER:[MessageHandler(Filters.regex('^(yes)$'),disclaimer_check)],
+            APIKEY:[MessageHandler(Filters.text & ~Filters.command, check_api)],
+            APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
             TRADERURL: [MessageHandler(Filters.text, url_check)],
+            TOTRADE: [MessageHandler(Filters.regex('^(yes|no)$'),trade_confirm)],
+            TMODE: [MessageHandler(Filters.regex('^(1|0)$'),tmode_confirm)],    
+            LMODE: [MessageHandler(Filters.regex('^(0|1|2)$'),lmode_confirm)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
@@ -765,6 +1342,9 @@ def main() -> None:
         entry_points=[CommandHandler('add', add_trader)],
         states={
             TRADERURL2: [MessageHandler(Filters.text & ~Filters.command, url_add)],
+            TOTRADE: [MessageHandler(Filters.regex('^(yes|no)$'),trade_confirm)],
+            TMODE: [MessageHandler(Filters.regex('^(1|0)$'),tmode_confirm)],    
+            LMODE: [MessageHandler(Filters.regex('^(0|1|2)$'),lmode_confirm)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
@@ -794,28 +1374,86 @@ def main() -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
-
+    conv_handler6 = ConversationHandler(
+        entry_points=[CommandHandler('setallleverage',set_all_leverage)],
+        states={
+            ALLLEV:[MessageHandler(Filters.text & ~Filters.command,setAllLeverage)],
+            REALSETLEV:[MessageHandler(Filters.text & ~Filters.command,setAllLeverageReal)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler7 = ConversationHandler(
+        entry_points=[CommandHandler('setleverage',set_leverage)],
+        states={
+            LEVTRADER:[MessageHandler(Filters.text & ~Filters.command,leverage_choosetrader)],
+            LEVSYM:[MessageHandler(Filters.text & ~Filters.command,leverage_choosesymbol)],
+            REALSETLEV2:[MessageHandler(Filters.text & ~Filters.command,setLeverageReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler8 = ConversationHandler(
+        entry_points=[CommandHandler('setallproportion',set_all_proportion)],
+        states={
+            ALLPROP:[MessageHandler(Filters.text & ~Filters.command,setAllProportion)],
+            REALSETPROP:[MessageHandler(Filters.text & ~Filters.command,setAllProportionReal)]
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler9 = ConversationHandler(
+        entry_points=[CommandHandler('setproportion',set_proportion)],
+        states={
+            PROPTRADER:[MessageHandler(Filters.text & ~Filters.command,proportion_choosetrader)],
+            PROPSYM:[MessageHandler(Filters.text & ~Filters.command,proportion_choosesymbol)],
+            REALSETPROP2:[MessageHandler(Filters.text & ~Filters.command,setProportionReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler10 = ConversationHandler(
+        entry_points=[CommandHandler('getleverage',get_leverage)],
+        states={
+            LEVTRADER:[MessageHandler(Filters.text & ~Filters.command,getleverage_choosetrader)],
+            REALSETLEV2:[MessageHandler(Filters.text & ~Filters.command,getLeverageReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler11 = ConversationHandler(
+        entry_points=[CommandHandler('getproportion',get_proportion)],
+        states={
+            LEVTRADER:[MessageHandler(Filters.text & ~Filters.command,getproportion_choosetrader)],
+            REALSETLEV2:[MessageHandler(Filters.text & ~Filters.command,getproportionReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler3)
     dispatcher.add_handler(conv_handler4)
     dispatcher.add_handler(conv_handler5)
+    dispatcher.add_handler(conv_handler6)
+    dispatcher.add_handler(conv_handler7)
+    dispatcher.add_handler(conv_handler8)
+    dispatcher.add_handler(conv_handler9)
+    dispatcher.add_handler(conv_handler10)
+    dispatcher.add_handler(conv_handler11)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("end",end_all))
     #TODO: add /end command
     # Start the Bot
     
     
-    with open("userdata.pickle","rb") as f:
-        userdata = pickle.load(f)
-    for x in userdata:
-        tname = retrieveUserName(x["urls"][0])
-        CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
-        UserLocks[x["chat_id"]] = threading.Lock()
-        for turl in x["urls"][1:]:
-            tname = retrieveUserName(turl)
-            CurrentUsers[x["chat_id"]].add_trader(turl,tname)
-            time.sleep(10)
+    # with open("userdata.pickle","rb") as f:
+    #     userdata = pickle.load(f)
+    # for x in userdata:
+    #     tname = retrieveUserName(x["urls"][0])
+    #     CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
+    #     UserLocks[x["chat_id"]] = threading.Lock()
+    #     for turl in x["urls"][1:]:
+    #         tname = retrieveUserName(turl)
+    #         CurrentUsers[x["chat_id"]].add_trader(turl,tname)
+    #         time.sleep(10)
+    t1 = threading.Thread(target=automatic_reload)
+    t1.start()
 
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
