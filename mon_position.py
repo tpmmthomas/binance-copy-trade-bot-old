@@ -278,6 +278,7 @@ class FetchLatestPosition(threading.Thread):
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
+            time.sleep(self.error*2)
             if self.error >=30:
                 tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
@@ -297,6 +298,7 @@ class FetchLatestPosition(threading.Thread):
                     self.driver.refresh()
                 except:
                     self.error += 1
+                    time.sleep(60)
                     continue
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source,features="html.parser")
@@ -327,6 +329,7 @@ class FetchLatestPosition(threading.Thread):
                                     else:
                                         self.positions[posKey] += quants[i]
                                 else:
+                                    posKey = tradeinfo[1].upper()+tradeinfo[0][4:].upper()
                                     if posKey in self.positions:
                                         self.positions[posKey] -= quants[i]
                 if self.num_no_data != 1:
@@ -1442,16 +1445,10 @@ def main() -> None:
     # Start the Bot
     
     
-    # with open("userdata.pickle","rb") as f:
-    #     userdata = pickle.load(f)
-    # for x in userdata:
-    #     tname = retrieveUserName(x["urls"][0])
-    #     CurrentUsers[x["chat_id"]] = users(x["chat_id"],x["urls"][0],tname)
-    #     UserLocks[x["chat_id"]] = threading.Lock()
-    #     for turl in x["urls"][1:]:
-    #         tname = retrieveUserName(turl)
-    #         CurrentUsers[x["chat_id"]].add_trader(turl,tname)
-    #         time.sleep(10)
+    with open("userdata.pickle","rb") as f:
+        userdata = pickle.load(f)
+    for x in userdata:
+        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, the updated software is online. You can play around with all the settings and commands (and I actually encourage it to help me discover bugs), just don't use your real api key and you will be safe.")
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
 
