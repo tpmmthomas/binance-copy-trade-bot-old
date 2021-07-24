@@ -1,4 +1,3 @@
-from numpy import add
 import constants as cnt
 import logging
 
@@ -576,7 +575,7 @@ def initTraderThread(chat_id,uname,init_trader,trader_name,api_key,api_secret,to
         chat_id = chat_id,
         text=f'Thanks! You will start receiving alerts when {trader_name} changes positions.\nHere is a list of available commands:'
     )
-    updater.bot.sendMessage(chat_id = chat_id,text='***GERNERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
+    updater.bot.sendMessage(chat_id = chat_id,text='***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
     if toTrade:
         updater.bot.sendMessage(chat_id= chat_id, text="*All your proportions have been set to 0x and all leverage has ben set to 20x (if applicable). Change these settings with extreme caution.*",parse_mode=telegram.ParseMode.MARKDOWN)
 
@@ -1113,7 +1112,7 @@ def getLeverageReal(update: Update, context: CallbackContext):
     if symbol not in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
-        return LEVSYM
+        return REALSETLEV2
     idx = context.user_data['idx']
     result = user.threads[idx].get_leverage(symbol)
     update.message.reply_text(f"The leverage set for {user.threads[idx].name}, {symbol} is {result}x.")
@@ -1164,7 +1163,7 @@ def getproportionReal(update: Update, context: CallbackContext):
     if symbol not in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
-        return LEVSYM
+        return REALSETLEV2
     idx = context.user_data['idx']
     result = user.threads[idx].get_proportion(symbol)
     update.message.reply_text(f"The proportion set for {user.threads[idx].name}, {symbol} is {result}x.")
@@ -1221,7 +1220,7 @@ class BinanceClient:
                 updater.bot.sendMessage(chat_id=self.chat_id,text=f"Sell {checkKey}: This trade will not be executed because your opened positions with this trader is less than the quantity.")
                 continue
             if quant == 0:
-                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Buy {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
                 continue
             balance,collateral,coin = 0,0,""
             try:
@@ -1463,7 +1462,6 @@ def main() -> None:
     # SIGTERM or SIGABRT. This should be used most of the time, since
     # start_polling() is non-blocking and will stop the bot gracefully.
     updater.idle()
-
 
 if __name__ == '__main__':
     main()
