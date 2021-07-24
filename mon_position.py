@@ -32,7 +32,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2= range(23)
+AUTH, TRADERURL, TRADERURL2, TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2,SAFERATIO= range(24)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 mutex = threading.Lock()
@@ -112,6 +112,7 @@ class FetchLatestPosition(threading.Thread):
         self.error = 0
         self.toTrade = toTrade
         self.positions= positions
+        self.tmodes = {}
         if self.positions is None:
             self.positions = {}
         if toTrade:
@@ -121,15 +122,15 @@ class FetchLatestPosition(threading.Thread):
                 self.proportion = {}
             if self.leverage is None:
                 self.leverage = {}
-            self.tmode = tmode
             self.lmode = lmode
             for symbol in listSymbols:
                 self.proportion[symbol] = 0
                 self.leverage[symbol] = 20
+                self.tmodes[symbol] = tmode
     
     def get_trader_profile(self):
         if self.toTrade:
-            return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmode":self.tmode,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
+            return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
         return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade}
 
     def changes(self,df,df2):
@@ -144,12 +145,12 @@ class FetchLatestPosition(threading.Thread):
                     size = size.replace(",","")
                 size = float(size)
                 if size >0:
-                    txtype.append("BuyLong")
+                    txtype.append("OpenLong")
                     txsymbol.append(row['symbol'])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
                 else:
-                    txtype.append("BuyShort")
+                    txtype.append("OpenShort")
                     txsymbol.append(row['symbol'])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
@@ -161,12 +162,12 @@ class FetchLatestPosition(threading.Thread):
                     size = size.replace(",","")
                 size = float(size)
                 if size > 0:
-                    txtype.append("SellLong")
+                    txtype.append("CloseLong")
                     txsymbol.append(row['symbol'])
                     txsize.append(-size)
                     executePrice.append(row["Mark Price"])
                 else:
-                    txtype.append("SellShort")
+                    txtype.append("CloseShort")
                     txsymbol.append(row['symbol'])
                     txsize.append(-size)
                     executePrice.append(row["Mark Price"])
@@ -211,7 +212,7 @@ class FetchLatestPosition(threading.Thread):
                     if isPositive and newsize > 0:
                         changesize = newsize-size
                         if changesize > 0:
-                            txtype.append("BuyLong")
+                            txtype.append("OpenLong")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             try:
@@ -220,7 +221,7 @@ class FetchLatestPosition(threading.Thread):
                                 exp = 0
                             executePrice.append(exp)
                         else:
-                            txtype.append("SellLong")
+                            txtype.append("CloseLong")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
@@ -230,12 +231,12 @@ class FetchLatestPosition(threading.Thread):
                     if not isPositive and newsize < 0:
                         changesize = newsize - size
                         if changesize > 0:
-                            txtype.append("SellShort")
+                            txtype.append("CloseShort")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
                         else:
-                            txtype.append("BuyShort")
+                            txtype.append("OpenShort")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             try:
@@ -248,12 +249,12 @@ class FetchLatestPosition(threading.Thread):
                         break
                 if not hasChanged:
                     if size > 0:
-                        txtype.append("SellLong")
+                        txtype.append("CloseLong")
                         txsymbol.append(row['symbol'])
                         txsize.append(-size)
                         executePrice.append(oldmark)
                     else:
-                        txtype.append("SellShort")
+                        txtype.append("CloseShort")
                         txsymbol.append(row['symbol'])
                         txsize.append(-size)
                         executePrice.append(oldmark)
@@ -263,12 +264,12 @@ class FetchLatestPosition(threading.Thread):
                     size = size.replace(",","")
                 size = float(size)
                 if size >0:
-                    txtype.append("BuyLong")
+                    txtype.append("OpenLong")
                     txsymbol.append(row['symbol'])
                     txsize.append(size)
                     executePrice.append(row['Entry Price'])
                 else:
-                    txtype.append("BuyShort")
+                    txtype.append("OpenShort")
                     txsymbol.append(row['symbol'])
                     txsize.append(size)
                     executePrice.append(row['Entry Price'])
@@ -322,19 +323,8 @@ class FetchLatestPosition(threading.Thread):
                         txlist = self.changes(self.prev_df,"x")
                         if self.toTrade:
                             UserLocks[self.chat_id].acquire()
-                            quants = CurrentUsers[self.chat_id].bclient.open_trade(txlist,self.proportion,self.leverage,self.lmode,self.tmode,self.positions)
+                            CurrentUsers[self.chat_id].bclient.open_trade(txlist,self.name,self.proportion,self.leverage,self.lmode,self.tmodes,self.positions)
                             UserLocks[self.chat_id].release()
-                            for i,tradeinfo in enumerate(txlist.values):
-                                if tradeinfo[0][:3] == "Buy":
-                                    posKey = tradeinfo[1].upper()+tradeinfo[0][3:].upper()
-                                    if posKey not in self.positions:
-                                        self.positions[posKey] = quants[i]
-                                    else:
-                                        self.positions[posKey] += quants[i]
-                                else:
-                                    posKey = tradeinfo[1].upper()+tradeinfo[0][4:].upper()
-                                    if posKey in self.positions:
-                                        self.positions[posKey] -= quants[i]
                 if self.num_no_data != 1:
                     self.prev_df = "x"
                     self.first_run = False
@@ -382,19 +372,8 @@ class FetchLatestPosition(threading.Thread):
                     txlist = self.changes(self.prev_df,output["data"])
                     if self.toTrade:
                         UserLocks[self.chat_id].acquire()
-                        quants = CurrentUsers[self.chat_id].bclient.open_trade(txlist,self.proportion,self.leverage,self.lmode,self.tmode,self.positions)
+                        CurrentUsers[self.chat_id].bclient.open_trade(txlist,self.name,self.proportion,self.leverage,self.lmode,self.tmodes,self.positions)
                         UserLocks[self.chat_id].release()
-                        for i,tradeinfo in enumerate(txlist.values):
-                            if tradeinfo[0][:3] == "Buy":
-                                posKey = tradeinfo[1].upper()+tradeinfo[0][3:].upper()
-                                if posKey not in self.positions:
-                                    self.positions[posKey] = quants[i]
-                                else:
-                                    self.positions[posKey] += quants[i]
-                            else:
-                                posKey = tradeinfo[1].upper()+tradeinfo[0][4:].upper()
-                                if posKey in self.positions:
-                                    self.positions[posKey] -= quants[i]
             self.prev_df = output["data"]
             self.first_run = False
             self.runtimes += 1
@@ -424,15 +403,20 @@ class FetchLatestPosition(threading.Thread):
         allsymbols = CurrentUsers[self.chat_id].bclient.get_symbols()
         secondProportion = {}
         secondLeverage = {}
+        secondtmodes = {}
         for symbol in allsymbols:
             if symbol in self.proportion:
                 secondProportion[symbol] = self.proportion[symbol]
                 secondLeverage[symbol] = self.leverage[symbol]
+                secondtmodes[symbol] = self.tmodes[symbol]
             else:
                 secondProportion[symbol] = 0
                 secondLeverage[symbol] = 20
+                secondtmodes[symbol] = 0
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Please note that there is a new symbol {symbol} available. You may want to adjust your settings for it.")
         self.proportion = secondProportion
         self.leverage = secondLeverage
+        self.tmodes = secondtmodes
 
     def change_proportion(self,symbol,prop):
         if symbol not in self.proportion:
@@ -490,6 +474,52 @@ class FetchLatestPosition(threading.Thread):
             self.leverage[symbol] = lev
         logger.info(f"{self.uname} Successfully changed all leverage.")
         updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed leverage!")
+        return
+
+    def change_tmode(self,symbol,tmode):
+        if symbol not in self.tmodes:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
+        try:
+            tmode = int(tmode)
+            assert tmode>=0 and tmode<=2
+        except:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but the order mode must be an integer between 0 and 2.")
+            return
+        self.tmodes[symbol] = tmode
+        logger.info(f"{self.uname} Successfully changed tmode.")
+        updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed order mode!")
+        return
+
+    def get_tmode(self,symbol):
+        if symbol not in self.tmodes:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but this symbol is not available right now.")
+            return
+        #updater.bot.sendMessage(chat_id=self.chat_id,text=f"The leverage for {symbol} is {self.leverage[symbol]}x.")
+        logger.info(f"{self.uname} Successfully queried tmode.")
+        return self.tmodes[symbol]
+    
+    def change_all_tmode(self,tmode):
+        try:
+            tmode = int(tmode)
+            assert tmode>=0 and tmode<=2
+        except:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but the order mode must be an integer between 0 and 2.")
+            return
+        for symbol in self.tmodes:
+            self.tmodes[symbol] = tmode
+        logger.info(f"{self.uname} Successfully changed all tmode.")
+        return
+
+    def change_lmode(self,lmode):
+        try:
+            lmode = int(lmode)
+            assert lmode >=0 and lmode <=2
+        except:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="Sorry,but the leverage mode must be an integer between 0 and 2.")
+            return
+        self.lmode = lmode
+        logger.info(f"{self.uname} Successfully changed lmode.")
+        #updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed leverage mode!")
         return
 
 def retrieveUserName(url):
@@ -561,21 +591,32 @@ def check_api(update: Update, context: CallbackContext):
 
 def check_secret(update: Update, context: CallbackContext):
     context.user_data['api_secret'] = update.message.text
-    update.message.reply_text("Now, please provide full URL of the trader you want to follow.")
+    update.message.reply_text("To protect your funds, you are required to enter a safe ratio as a threshold in which trades will be opened.\nIf your account's available balance * safe ratio <= the margin required, the trade will not be set up.\n(Enter a number between 0 and 1.)")
+    return SAFERATIO
+
+def check_ratio(update: Update, context: CallbackContext):
+    try:
+        ratio = float(update.message.text)
+        assert ratio>=0 and ratio<=1
+    except:
+        update.message.reply_text("Sorry, the ratio is invalid. Please enter again.")
+        return SAFERATIO
+    context.user_data['safe_ratio'] = ratio
+    update.message.reply_text("Now, please provide a full URL of the trader you want to follow.")
     return TRADERURL 
 
-def initTraderThread(chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade,tmode,lmode):
+def initTraderThread(chat_id,uname,safe_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode,lmode):
     UserLocks[chat_id] = threading.Lock() #when calling binance client, have to use the lock.
     if toTrade:
-        CurrentUsers[chat_id] = users(chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade,tmode,lmode)
+        CurrentUsers[chat_id] = users(chat_id,uname,safe_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode,lmode)
     else:
-        CurrentUsers[chat_id] = users(chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade)
+        CurrentUsers[chat_id] = users(chat_id,uname,safe_ratio,init_trader,trader_name,api_key,api_secret,toTrade)
     
     updater.bot.sendMessage(
         chat_id = chat_id,
         text=f'Thanks! You will start receiving alerts when {trader_name} changes positions.\nHere is a list of available commands:'
     )
-    updater.bot.sendMessage(chat_id = chat_id,text='***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
+    updater.bot.sendMessage(chat_id=chat_id,text='***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair.\n/setlmode: Change the leverage mode of a trader.\n/settmode: Change the trading mode for a (trader,symbol) pair.\n/setalltmode: Change trading mode for a trader, all symbols.\n/changesr: Change safety ratio')
     if toTrade:
         updater.bot.sendMessage(chat_id= chat_id, text="*All your proportions have been set to 0x and all leverage has ben set to 20x (if applicable). Change these settings with extreme caution.*",parse_mode=telegram.ParseMode.MARKDOWN)
 
@@ -614,16 +655,17 @@ def trade_confirm(update: Update, context: CallbackContext):
     else:
         context.user_data['toTrade'] = False
         if context.user_data['First']:
-            t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],-1,-1))###CEHCK
+            t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['safe_ratio'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],-1,-1))###CEHCK
             t1.start()
         else:
             t1 = threading.Thread(target=addTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['toTrade'],-1,-1))
             t1.start()
         return ConversationHandler.END
-    update.message.reply_text("Please select the trading mode:")
+    update.message.reply_text("Please select the default trading mode:")
     update.message.reply_text("0. MARKET: Once we detected a change in position, you will make an order immediately at the market price. As a result, your entry price might deviate from the trader's entry price (especially when there are significant market movements).") 
     update.message.reply_text("1. LIMIT: You will make an limit order at the same price as the trader's estimated entry price. However, due to fluctuating market movements, your order might not be fulfilled.")
-    update.message.reply_text("Please type 0 or 1 to indicate your choice.")
+    update.message.reply_text("2. LIMIT, THEN MARKET: When opening positions, you will make an limit order at the same price as the trader's estimated entry price. When closing positions, you will follow market.")
+    update.message.reply_text("Please type 0,1 or 2 to indicate your choice. Note that you can change it later for every (trader,symbol) pair.")
     return TMODE
 
 def tmode_confirm(update: Update, context: CallbackContext):
@@ -639,7 +681,7 @@ def lmode_confirm(update: Update, context: CallbackContext):
     context.user_data['lmode'] = int(update.message.text)
     update.message.reply_text("Please wait...")
     if context.user_data['First']:
-        t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],context.user_data['tmode'],context.user_data['lmode']))###CEHCK
+        t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['safe_ratio'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],context.user_data['tmode'],context.user_data['lmode']))###CEHCK
         t1.start()
     else:
         t1 = threading.Thread(target=addTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['toTrade'],context.user_data['tmode'],context.user_data['lmode']))
@@ -721,7 +763,7 @@ def url_add(update: Update, context: CallbackContext) -> int:
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair. ')
+    update.message.reply_text('***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair.\n/setlmode: Change the leverage mode of a trader.\n/settmode: Change the trading mode for a (trader,symbol) pair.\n/setalltmode: Change trading mode for a trader, all symbols.\n/changesr: Change safety ratio')
 
 def split(a, n):
     if n==0:
@@ -795,12 +837,17 @@ def end_all(update:Update, context: CallbackContext):
     if CurrentUsers[update.message.chat_id].is_handling:
         update.message.reply_text("You are adding another trader, wait for it to complete first!")
         return
+    logger.info("%s ended the service.",update.message.from_user.first_name)
+    update.message.reply_text("Confirm ending the service? This means that we will not make trades for you anymore and you have to take care of the positions previously opened by yourself. Type 'yes' to confirm, /cancel to cancel.")
+    return 1
+
+def realEndAll(update:Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
     for thread in user.threads:
         thread.stop()
     del CurrentUsers[update.message.chat_id]
-    logger.info("%s ended the service.",update.message.from_user.first_name)
-    update.message.reply_text("Sorry to see you go. You are welcome to set up service again with /start.")
+    update.message.reply_text("Sorry to see you go. You can press /start to restart the service.")
+    return ConversationHandler.END
 
 def end_everyone(update:Update, context: CallbackContext):
     for user in CurrentUsers:
@@ -853,6 +900,8 @@ def automatic_reload():
             UserLocks[users].acquire()
             CurrentUsers[users].bclient.reload()
             UserLocks[users].release()
+            for traders in users.threads:
+                traders.reload()
         save_to_file(None,None)
     
 def set_all_leverage(update: Update, context: CallbackContext):
@@ -1034,6 +1083,7 @@ def proportion_choosetrader(update: Update, context: CallbackContext):
         update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
         return ConversationHandler.END
     context.user_data['idx'] = idx
+    print("Hi")
     UserLocks[update.message.chat_id].acquire()
     listsymbols = user.bclient.get_symbols()
     UserLocks[update.message.chat_id].release()
@@ -1061,7 +1111,7 @@ def setProportionReal(update: Update, context: CallbackContext):
         assert prop >=0
     except:
         update.message.reply_text("This is not a valid proportion, please enter again.")
-        return 
+        return REALSETPROP2
     idx = context.user_data['idx'] 
     symbol = context.user_data['symbol']
     user.threads[idx].change_proportion(symbol,prop)
@@ -1168,14 +1218,197 @@ def getproportionReal(update: Update, context: CallbackContext):
     result = user.threads[idx].get_proportion(symbol)
     update.message.reply_text(f"The proportion set for {user.threads[idx].name}, {symbol} is {result}x.")
     return ConversationHandler.END
-  
+
+def set_omode(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set trading mode for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return PROPTRADER
+
+def omode_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} adjusting tmode.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text("Please choose the symbol to set.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+    return PROPSYM
+
+def omode_choosesymbol(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    context.user_data['symbol'] = update.message.text
+    UserLocks[update.message.chat_id].acquire()
+    listsymbols = user.bclient.get_symbols()
+    UserLocks[update.message.chat_id].release()
+    if update.message.text not in listsymbols:
+        listsymbols = [[x] for x in listsymbols]
+        update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
+        return PROPSYM
+    update.message.reply_text("Please enter the target trading mode.")
+    update.message.reply_text("0. MARKET: Once we detected a change in position, you will make an order immediately at the market price. As a result, your entry price might deviate from the trader's entry price (especially when there are significant market movements).") 
+    update.message.reply_text("1. LIMIT: You will make an limit order at the same price as the trader's estimated entry price. However, due to fluctuating market movements, your order might not be fulfilled.")
+    update.message.reply_text("2. LIMIT, THEN MARKET: When opening positions, you will make an limit order at the same price as the trader's estimated entry price. When closing positions, you will follow market.")
+    update.message.reply_text("Please type 0,1 or 2 to indicate your choice.")
+    return REALSETPROP2
+
+def setomodeReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        tmode = int(update.message.text)
+        assert tmode >=0 and tmode <=2
+    except:
+        update.message.reply_text("This is not a valid trading mode, please enter again.")
+        return REALSETPROP2
+    idx = context.user_data['idx'] 
+    symbol = context.user_data['symbol']
+    user.threads[idx].change_tmode(symbol,tmode)
+    return ConversationHandler.END
+
+def set_lmode(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set leverage mode for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return LEVTRADER
+
+def setlmode_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} setting leverage mode.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    update.message.reply_text("Please choose the leverage mode.")
+    update.message.reply_text("0. FOLLOW: You will follow the same leverage as the trader. However, note that the leverage is only an estimate. In case the leverage information cannot be obtained, we would look at the trader's history leverage on the given symbol to determine the leverage. If that was not available as well, a default of 20x leverage would be used.") 
+    update.message.reply_text("1. FIXED: You can fix your own leverage settings within this bot for every (trader,symbol) combination. Once we place an order, the leverage set by you will be used regardless of the trader's leverage. Default is 20x and can be changed later.")
+    update.message.reply_text("2: IGNORE: You will follow the leverage settings on the binance site, we will not attempt to change any leverage settings for you.")
+    update.message.reply_text("Please type 0,1 or 2 to indicate your choice.")
+    return REALSETLEV2
+
+def setlmodeReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        lmode = int(update.message.text)
+        assert lmode >=0 and lmode <=2
+    except:
+        update.message.reply_text("This is not a valid trading mode, please enter again.")
+        return REALSETLEV2
+    idx = context.user_data['idx']
+    result = user.threads[idx].change_lmode(lmode)
+    update.message.reply_text(f"Successfully changed leverage mode!")
+    return ConversationHandler.END
+
+def set_allomode(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    if CurrentUsers[update.message.chat_id].is_handling:
+        update.message.reply_text("You are adding another trader, wait for it to complete first!")
+        return ConversationHandler.END
+    listtraders = CurrentUsers[update.message.chat_id].trader_names
+    if len(listtraders) == 0:
+        update.message.reply_text("You are not following any traders.")
+        return ConversationHandler.END
+    listtraders = split(listtraders,len(listtraders)//2)
+    update.message.reply_text("Please choose the trader to set trading mode for.\n(/cancel to cancel)",
+        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
+        )
+    return LEVTRADER
+
+def allomode_choosetrader(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} setting trading mode.")
+    try:
+        idx = user.trader_names.index(update.message.text)
+    except:
+        update.message.reply_text("This is not a valid trader.")
+        return ConversationHandler.END
+    if not user.threads[idx].toTrade:
+        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
+        return ConversationHandler.END
+    context.user_data['idx'] = idx
+    update.message.reply_text("Please enter the target trading mode.")
+    update.message.reply_text("0. MARKET: Once we detected a change in position, you will make an order immediately at the market price. As a result, your entry price might deviate from the trader's entry price (especially when there are significant market movements).") 
+    update.message.reply_text("1. LIMIT: You will make an limit order at the same price as the trader's estimated entry price. However, due to fluctuating market movements, your order might not be fulfilled.")
+    update.message.reply_text("2. LIMIT, THEN MARKET: When opening positions, you will make an limit order at the same price as the trader's estimated entry price. When closing positions, you will follow market.")
+    update.message.reply_text("Please type 0,1 or 2 to indicate your choice.")
+    return REALSETLEV2
+
+def setallomodeReal(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    try:
+        tmode = int(update.message.text)
+        assert tmode >=0 and tmode <=2
+    except:
+        update.message.reply_text("This is not a valid trading mode, please enter again.")
+        return REALSETPROP2
+    idx = context.user_data['idx']
+    user.threads[idx].change_all_tmode(tmode)
+    update.message.reply_text(f"Successfully changed trading mode!")
+    return ConversationHandler.END
+    
+def change_safetyratio(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    update.message.reply_text("Please enter the safety ratio (between 0 and 1):")
+    return LEVTRADER
+def confirm_changesafety(update: Update, context: CallbackContext):
+    try:
+        safety_ratio = float(update.message.text)
+        assert safety_ratio>=0 and safety_ratio <=1
+    except:
+        update.message.reply_text("This is not a valid ratio, please enter again.")
+        return LEVTRADER
+    UserLocks[update.message.chat_id].acquire()
+    CurrentUsers[update.message.chat_id].bclient.change_safety_ratio(safety_ratio)
+    UserLocks[update.message.chat_id].release()
+    return ConversationHandler.END
+
 class BinanceClient:
-    def __init__(self,chat_id,uname,api_key,api_secret):
+    def __init__(self,chat_id,uname,safety_ratio,api_key,api_secret):
         self.client = Client(api_key,api_secret)
         self.chat_id = chat_id
         self.uname = uname
         self.stepsize = {}
         self.ticksize = {}
+        self.safety_ratio = safety_ratio
         info = self.client.futures_exchange_info()
         try:
             self.client.futures_change_position_mode(dualSidePosition=True)
@@ -1197,45 +1430,116 @@ class BinanceClient:
             symbolList.append(symbol)
         return symbolList
 
-    def open_trade(self,df,proportion,leverage,lmode,tmode,positions):
+    def query_trade(self,orderId,symbol,positionKey,isOpen,uname): #ONLY to be run as thread
+        numTries = 0
+        time.sleep(1)
+        result = ""
+        executed_qty = 0
+        while True:
+            try:
+                result = self.client.futures_get_order(symbol=symbol,orderId=orderId)
+                if result['status'] == "FILLED":
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) fulfilled successfully.")
+                    #ADD TO POSITION
+                    if isOpen:
+                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        UserLocks[self.chat_id].acquire() #needed bc run as thread
+                        if positionKey in CurrentUsers[self.chat_id].threads[idx].positions:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] += float(result['executedQty'])
+                        else:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = float(result['executedQty'])
+                        UserLocks[self.chat_id].release()
+                    else:
+                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        UserLocks[self.chat_id].acquire() #needed bc run as thread
+                        if positionKey in CurrentUsers[self.chat_id].threads[idx].positions:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] -= float(result['executedQty'])
+                        else:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = 0
+                        UserLocks[self.chat_id].release()
+                    return
+                elif result['status'] in ["CANCELED","PENDING_CANCEL","REJECTED","EXPIRED"]:
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) is cancelled/rejected.")
+                elif result['status'] == "PARTIALLY_FILLED":
+                    updatedQty = float(result['executedQty']) - executed_qty
+                    if isOpen:
+                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        UserLocks[self.chat_id].acquire() #needed bc run as thread
+                        if positionKey in CurrentUsers[self.chat_id].threads[idx].positions:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] += updatedQty
+                        else:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = updatedQty
+                        UserLocks[self.chat_id].release()
+                    else:
+                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        UserLocks[self.chat_id].acquire() #needed bc run as thread
+                        if positionKey in CurrentUsers[self.chat_id].threads[idx].positions:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] -= float(result['executedQty'])
+                        else:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = 0
+                        UserLocks[self.chat_id].release()
+                    executed_qty = float(result['executedQty'])
+            except:
+                pass
+            if numTries >= 59:
+                break
+            time.sleep(60)
+            numTries += 1
+        if result != "" and result['status'] == "PARTIALLY_FILLED":
+            updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) is only partially filled. The rest will be cancelled.")
+            try:
+                self.client.futures_cancel_order(symbol=symbol,orderId=orderId) 
+            except:
+                pass
+
+    def open_trade(self,df,uname,proportion,leverage,lmode,tmodes,positions):
         df = df.values
         allquant = []
+        isOpen = False
         for tradeinfo in df:
             types = tradeinfo[0].upper()
-            if types[:3] == "BUY":
-                side = types[:3]
-                positionSide = types[3:]
+            if types[:4] == "OPEN":
+                isOpen = True
+                positionSide = types[4:]
+                if positionSide == "LONG":
+                    side = "BUY"
+                else:
+                    side = "SELL"
                 if lmode != 2:
                     try:
                         self.client.futures_change_leverage(symbol=tradeinfo[1],leverage=leverage[tradeinfo[1]])
                     except:
                         pass
             else:
-                side = types[:4]
-                positionSide = types[4:]
+                positionSide = types[5:]
+                if positionSide == "LONG":
+                    side = "SELL"
+                else:
+                    side = "BUY"
             quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
             allquant.append(quant)
             checkKey = tradeinfo[1].upper()+positionSide
-            if side == "SELL" and ((checkKey not in positions) or (positions[checkKey] < quant)):
-                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Sell {checkKey}: This trade will not be executed because your opened positions with this trader is less than the quantity.")
-                continue
+            if not isOpen and ((checkKey not in positions) or (positions[checkKey] < quant)):
+                if checkKey not in positions or positions[checkKey] == 0:
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: This trade will not be executed because your opened positions with this trader is less than the quantity.")
+                    continue
+                elif positions[checkKey] < quant:
+                    quant = min(positions[checkKey],quant)
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.")
+                    allquant[-1] = quant
             if quant == 0:
                 updater.bot.sendMessage(chat_id=self.chat_id,text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
                 continue
             balance,collateral,coin = 0,0,""
             try:
-                if tradeinfo[1].find("USDT") != 0:
-                    coin = "USDT"
-                    for asset in self.client.futures_account()["assets"]:
-                        if asset['asset'] == "USDT":
-                            balance = asset['maxWithdrawAmount']
-                            break
-                elif tradeinfo[1].find("BUSD") != 0:
-                    coin = "BUSD"
-                    for asset in self.client.futures_account()["assets"]:
-                        if asset['asset'] == "BUSD":
-                            balance = asset['maxWithdrawAmount']
-                            break
+                coin = "USDT"
+                for asset in self.client.futures_account()["assets"]:
+                    if asset['asset'] == "USDT":
+                        balance = asset['maxWithdrawAmount']
+                        break
+                if tradeinfo[1][-4:] == "BUSD":
+                    tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
+                    updater.bot.sendMessage(chat_id=self.chat_id,text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.")
             except BinanceAPIException as e:
                 coin = "USDT"
                 balance = "0"
@@ -1243,24 +1547,27 @@ class BinanceClient:
             balance = float(balance)
             latest_price = float(self.client.futures_mark_price(symbol=tradeinfo[1])['markPrice'])
             collateral = (latest_price * quant) / leverage[tradeinfo[1]]
-            if side == "BUY":
+            if isOpen:
                 updater.bot.sendMessage(chat_id=self.chat_id,text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.")
-                if collateral >= (balance/5):
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than 20% of your available balance. Manage your risks accordingly and reduce proportion if necessary.")
+                # if collateral >= balance*self.safety_ratio:
+                #     updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
+                #     continue
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant =  "{:0.0{}f}".format(quant,reqstepsize)
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
-            if positionSide == "SHORT":
-                side = "BUY" if side == "SELL" else "SELL" # turns out have to reverse it, do it here for least 
-            if tmode == 0:
+            if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]]==2 and isOpen):
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+                    rvalue = self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
                     logger.info(f"{self.uname} opened order.")
+                    positionKey = tradeinfo[1] + positionSide
+                    t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[1],positionKey,isOpen,uname))
+                    t1.start()
                 except BinanceAPIException as e:
                     logger.error(e)
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
             else:
                 try:
                     target_price = float(target_price)
@@ -1274,10 +1581,14 @@ class BinanceClient:
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
+                    rvalue = self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
                     logger.info(f"{self.uname} opened order.")
+                    positionKey = tradeinfo[1] + positionSide
+                    t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[1],positionKey,isOpen,uname))
+                    t1.start()
                 except BinanceAPIException as e:
                     logger.error(e)
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
         return allquant
 
     def reload(self):
@@ -1289,9 +1600,15 @@ class BinanceClient:
             secondstepsize[thing['symbol']] = round(-math.log(float(thing['filters'][1]['stepSize']),10))
         self.ticksize = secondticksize
         self.stepsize = secondstepsize 
+    
+    def change_safety_ratio(self,safety_ratio):
+        logger.info(f"{self.uname} changed safety ratio.")
+        self.safety_ratio = safety_ratio
+        updater.bot.sendMessage(chat_id=self.chat_id,text="Succesfully changed safety ratio.")
+        return
 
 class users:
-    def __init__(self,chat_id,uname,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None):
+    def __init__(self,chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None):
         self.chat_id = chat_id
         self.trader_urls = [init_trader]
         self.trader_names = [trader_name] 
@@ -1300,7 +1617,7 @@ class users:
         self.uname = uname
         self.api_key = api_key
         self.api_secret = api_secret
-        self.bclient = BinanceClient(chat_id,uname,api_key,api_secret)
+        self.bclient = BinanceClient(chat_id,uname,safety_ratio,api_key,api_secret)
         listsymbols = self.bclient.get_symbols()
         if toTrade:
             thr = FetchLatestPosition(listsymbols,init_trader,chat_id,trader_name,uname,toTrade,tmode,lmode) 
@@ -1339,9 +1656,10 @@ def main() -> None:
             DISCLAIMER:[MessageHandler(Filters.regex('^(yes)$'),disclaimer_check)],
             APIKEY:[MessageHandler(Filters.text & ~Filters.command, check_api)],
             APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
+            SAFERATIO: [MessageHandler(Filters.text & ~Filters.command, check_ratio)],
             TRADERURL: [MessageHandler(Filters.text, url_check)],
             TOTRADE: [MessageHandler(Filters.regex('^(yes|no)$'),trade_confirm)],
-            TMODE: [MessageHandler(Filters.regex('^(1|0)$'),tmode_confirm)],    
+            TMODE: [MessageHandler(Filters.regex('^(0|1|2)$'),tmode_confirm)],    
             LMODE: [MessageHandler(Filters.regex('^(0|1|2)$'),lmode_confirm)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
@@ -1351,7 +1669,7 @@ def main() -> None:
         states={
             TRADERURL2: [MessageHandler(Filters.text & ~Filters.command, url_add)],
             TOTRADE: [MessageHandler(Filters.regex('^(yes|no)$'),trade_confirm)],
-            TMODE: [MessageHandler(Filters.regex('^(1|0)$'),tmode_confirm)],    
+            TMODE: [MessageHandler(Filters.regex('^(0|1|2)$'),tmode_confirm)],    
             LMODE: [MessageHandler(Filters.regex('^(0|1|2)$'),lmode_confirm)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
@@ -1432,6 +1750,45 @@ def main() -> None:
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )
+    conv_handler12 = ConversationHandler(
+        entry_points=[CommandHandler('end',end_all)],
+        states={
+            1:[MessageHandler(Filters.regex('^(yes)$'),realEndAll)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler13 = ConversationHandler(
+        entry_points=[CommandHandler('settmode',set_omode)],
+        states={
+            PROPTRADER:[MessageHandler(Filters.text & ~Filters.command,omode_choosetrader)],
+            PROPSYM:[MessageHandler(Filters.text & ~Filters.command,omode_choosesymbol)],
+            REALSETPROP2:[MessageHandler(Filters.regex('^(0|1|2)$'),setomodeReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler14 = ConversationHandler(
+        entry_points=[CommandHandler('setlmode',set_lmode)],
+        states={
+            LEVTRADER:[MessageHandler(Filters.text & ~Filters.command,setlmode_choosetrader)],
+            REALSETLEV2:[MessageHandler(Filters.regex('^(0|1|2)$'),setlmodeReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler15 = ConversationHandler(
+        entry_points=[CommandHandler('setalltmode',set_allomode)],
+        states={
+            LEVTRADER:[MessageHandler(Filters.text & ~Filters.command,allomode_choosetrader)],
+            REALSETLEV2:[MessageHandler(Filters.regex('^(0|1|2)$'),setallomodeReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+    conv_handler16 = ConversationHandler(
+        entry_points=[CommandHandler('changesr',change_safetyratio)],
+        states={
+            LEVTRADER:[MessageHandler(Filters.text & ~Filters.command,confirm_changesafety)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
     
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
@@ -1444,8 +1801,12 @@ def main() -> None:
     dispatcher.add_handler(conv_handler9)
     dispatcher.add_handler(conv_handler10)
     dispatcher.add_handler(conv_handler11)
+    dispatcher.add_handler(conv_handler12)
+    dispatcher.add_handler(conv_handler13)
+    dispatcher.add_handler(conv_handler14)
+    dispatcher.add_handler(conv_handler15)
+    dispatcher.add_handler(conv_handler16)
     dispatcher.add_handler(CommandHandler("help", help_command))
-    dispatcher.add_handler(CommandHandler("end",end_all))
     #TODO: add /end command
     # Start the Bot
     
