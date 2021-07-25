@@ -1810,18 +1810,20 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("help", help_command))
     #TODO: add /end command
     # Start the Bot
+    #chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None)
     #(self,url,name,toTrade,tmode=None,lmode=None):
     #save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
     #{"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
     with open("userdata.pickle","rb") as f:
         userdata = pickle.load(f)
     for x in userdata:
-        if x['profiles'][0]['trade']:
+        UserLocks[x['chat_id']] = threading.Lock()
+        if not x['profiles'][0]['trade']:
             CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'])
         else:
             CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'],x['profiles'][0]['tmodes']['BTCUSDT'],x['profiles'][0]['lmode'])
         for i in range(1,len(x['profiles'])):
-            if x['profiles'][i]['trade']:
+            if not x['profiles'][i]['trade']:
                 CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
             else:
                 CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],x['profiles'][i]['tmodes']['BTCUSDT'],x['profiles'][i]['lmode'])
