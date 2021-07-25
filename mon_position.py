@@ -902,6 +902,7 @@ def automatic_reload():
             UserLocks[users].release()
             for traders in users.threads:
                 traders.reload()
+            time.sleep(60)
         save_to_file(None,None)
     
 def set_all_leverage(update: Update, context: CallbackContext):
@@ -1389,6 +1390,7 @@ def change_safetyratio(update: Update, context: CallbackContext):
         return ConversationHandler.END
     update.message.reply_text("Please enter the safety ratio (between 0 and 1):")
     return LEVTRADER
+
 def confirm_changesafety(update: Update, context: CallbackContext):
     try:
         safety_ratio = float(update.message.text)
@@ -1424,7 +1426,6 @@ class BinanceClient:
             logger.error(e)
 
     def get_symbols(self):
-        self.reload()
         symbolList = []
         for symbol in self.stepsize:
             symbolList.append(symbol)
@@ -1809,17 +1810,21 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("help", help_command))
     #TODO: add /end command
     # Start the Bot
+    #(self,url,name,toTrade,tmode=None,lmode=None):
     #save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
     #{"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
     with open("userdata.pickle","rb") as f:
         userdata = pickle.load(f)
-    # for x in userdata:
-    #     if x['profiles'][0]['trade']:
-    #         CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'])
-    #     else:
-    #         CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'],0,x['profiles']['lmode'])
-    #     for i in range(1,len(x['profiles'])):
-
+    for x in userdata:
+        if x['profiles'][0]['trade']:
+            CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'])
+        else:
+            CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'],x['profiles'][0]['tmodes']['BTCUSDT'],x['profiles'][0]['lmode'])
+        for i in range(1,len(x['profiles'])):
+            if x['profiles'][i]['trade']:
+                CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
+            else:
+                CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],x['profiles'][i]['tmodes']['BTCUSDT'],x['profiles'][i]['lmode'])
     for x in userdata:
         updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. Please initialize with /start again as there are new settings.")
         
