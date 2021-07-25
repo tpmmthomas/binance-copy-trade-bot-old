@@ -887,7 +887,7 @@ def save_to_file(update: Update, context: CallbackContext):
         traderProfiles = []
         for trader in user.threads:
             traderProfiles.append(trader.get_trader_profile())
-        save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
+        save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"safety_ratrio":user.bclient.safety_ratio,"api_key":user.api_key,"api_secret":user.api_secret})
     with open("userdata.pickle",'wb') as f:
         pickle.dump(save_items,f)
     logger.info("Saved user current state.")
@@ -1556,7 +1556,7 @@ class BinanceClient:
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant =  "{:0.0{}f}".format(quant,reqstepsize)
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
-            if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]]==2 and isOpen):
+            if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]]==2 and not isOpen):
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
@@ -1809,14 +1809,22 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("help", help_command))
     #TODO: add /end command
     # Start the Bot
-    
-    
-    # with open("userdata.pickle","rb") as f:
-    #     userdata = pickle.load(f)
+    #save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
+    #{"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
+    with open("userdata.pickle","rb") as f:
+        userdata = pickle.load(f)
     # for x in userdata:
-    #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, the updated software is online. You can play around with all the settings and commands (and I actually encourage it to help me discover bugs), just don't use your real api key and you will be safe.")
-    # t1 = threading.Thread(target=automatic_reload)
-    # t1.start()
+    #     if x['profiles'][0]['trade']:
+    #         CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'])
+    #     else:
+    #         CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'],0,x['profiles']['lmode'])
+    #     for i in range(1,len(x['profiles'])):
+
+    for x in userdata:
+        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. Please initialize with /start again as there are new settings.")
+        
+    t1 = threading.Thread(target=automatic_reload)
+    t1.start()
 
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
