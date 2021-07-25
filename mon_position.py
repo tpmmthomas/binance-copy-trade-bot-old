@@ -1550,9 +1550,9 @@ class BinanceClient:
             collateral = (latest_price * quant) / leverage[tradeinfo[1]]
             if isOpen:
                 updater.bot.sendMessage(chat_id=self.chat_id,text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.")
-                # if collateral >= balance*self.safety_ratio:
-                #     updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
-                #     continue
+                if collateral >= balance*self.safety_ratio:
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
+                    continue
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant =  "{:0.0{}f}".format(quant,reqstepsize)
@@ -1830,7 +1830,7 @@ def main() -> None:
             else:
                 CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],x['profiles'][i]['tmodes']['BTCUSDT'],x['profiles'][i]['lmode'])
     for x in userdata:
-        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. Please initialize with /start again as there are new settings.")
+        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. You should start receiving notifications now.")
         
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
