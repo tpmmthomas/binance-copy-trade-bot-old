@@ -1556,7 +1556,7 @@ class BinanceClient:
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant =  "{:0.0{}f}".format(quant,reqstepsize)
-            target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
+            target_price = "{:0.0{}f}".format(float(tradeinfo[3].replace(",","")),reqticksize)
             if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]]==2 and not isOpen):
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
