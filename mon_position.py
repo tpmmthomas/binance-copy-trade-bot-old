@@ -1494,102 +1494,105 @@ class BinanceClient:
                 pass
 
     def open_trade(self,df,uname,proportion,leverage,lmode,tmodes,positions):
-        df = df.values
-        allquant = []
-        isOpen = False
-        for tradeinfo in df:
-            types = tradeinfo[0].upper()
-            if types[:4] == "OPEN":
-                isOpen = True
-                positionSide = types[4:]
-                if positionSide == "LONG":
-                    side = "BUY"
+        try:
+            df = df.values
+            allquant = []
+            isOpen = False
+            for tradeinfo in df:
+                types = tradeinfo[0].upper()
+                if types[:4] == "OPEN":
+                    isOpen = True
+                    positionSide = types[4:]
+                    if positionSide == "LONG":
+                        side = "BUY"
+                    else:
+                        side = "SELL"
+                    if lmode != 2:
+                        try:
+                            self.client.futures_change_leverage(symbol=tradeinfo[1],leverage=leverage[tradeinfo[1]])
+                        except:
+                            pass
                 else:
-                    side = "SELL"
-                if lmode != 2:
+                    positionSide = types[5:]
+                    if positionSide == "LONG":
+                        side = "SELL"
+                    else:
+                        side = "BUY"
+                quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
+                allquant.append(quant)
+                checkKey = tradeinfo[1].upper()+positionSide
+                if not isOpen and ((checkKey not in positions) or (positions[checkKey] < quant)):
+                    if checkKey not in positions or positions[checkKey] == 0:
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: This trade will not be executed because your opened positions with this trader is less than the quantity.")
+                        continue
+                    elif positions[checkKey] < quant:
+                        quant = min(positions[checkKey],quant)
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.")
+                        allquant[-1] = quant
+                if quant == 0:
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
+                    continue
+                balance,collateral,coin = 0,0,""
+                try:
+                    coin = "USDT"
+                    for asset in self.client.futures_account()["assets"]:
+                        if asset['asset'] == "USDT":
+                            balance = asset['maxWithdrawAmount']
+                            break
+                    if tradeinfo[1][-4:] == "BUSD":
+                        tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
+                        updater.bot.sendMessage(chat_id=self.chat_id,text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.")
+                except BinanceAPIException as e:
+                    coin = "USDT"
+                    balance = "0"
+                    logger.error(e) 
+                balance = float(balance)
+                latest_price = float(self.client.futures_mark_price(symbol=tradeinfo[1])['markPrice'])
+                collateral = (latest_price * quant) / leverage[tradeinfo[1]]
+                if isOpen:
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.")
+                    # if collateral >= balance*self.safety_ratio:
+                    #     updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
+                    #     continue
+                reqticksize = self.ticksize[tradeinfo[1]]
+                reqstepsize = self.stepsize[tradeinfo[1]]
+                quant =  "{:0.0{}f}".format(quant,reqstepsize)
+                target_price = "{:0.0{}f}".format(float(tradeinfo[3].replace(",","")),reqticksize)
+                if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]]==2 and not isOpen):
                     try:
-                        self.client.futures_change_leverage(symbol=tradeinfo[1],leverage=leverage[tradeinfo[1]])
+                        tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                        rvalue = self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
+                        logger.info(f"{self.uname} opened order.")
+                        positionKey = tradeinfo[1] + positionSide
+                        t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[1],positionKey,isOpen,uname))
+                        t1.start()
+                    except BinanceAPIException as e:
+                        logger.error(e)
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
+                else:
+                    try:
+                        target_price = float(target_price)
+                        if positionSide == "LONG":
+                            target_price = min(latest_price,target_price) 
+                        else:
+                            target_price = max(latest_price,target_price)
                     except:
                         pass
-            else:
-                positionSide = types[5:]
-                if positionSide == "LONG":
-                    side = "SELL"
-                else:
-                    side = "BUY"
-            quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
-            allquant.append(quant)
-            checkKey = tradeinfo[1].upper()+positionSide
-            if not isOpen and ((checkKey not in positions) or (positions[checkKey] < quant)):
-                if checkKey not in positions or positions[checkKey] == 0:
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: This trade will not be executed because your opened positions with this trader is less than the quantity.")
-                    continue
-                elif positions[checkKey] < quant:
-                    quant = min(positions[checkKey],quant)
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.")
-                    allquant[-1] = quant
-            if quant == 0:
-                updater.bot.sendMessage(chat_id=self.chat_id,text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
-                continue
-            balance,collateral,coin = 0,0,""
-            try:
-                coin = "USDT"
-                for asset in self.client.futures_account()["assets"]:
-                    if asset['asset'] == "USDT":
-                        balance = asset['maxWithdrawAmount']
-                        break
-                if tradeinfo[1][-4:] == "BUSD":
-                    tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
-                    updater.bot.sendMessage(chat_id=self.chat_id,text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.")
-            except BinanceAPIException as e:
-                coin = "USDT"
-                balance = "0"
-                logger.error(e) 
-            balance = float(balance)
-            latest_price = float(self.client.futures_mark_price(symbol=tradeinfo[1])['markPrice'])
-            collateral = (latest_price * quant) / leverage[tradeinfo[1]]
-            if isOpen:
-                updater.bot.sendMessage(chat_id=self.chat_id,text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.")
-                # if collateral >= balance*self.safety_ratio:
-                #     updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
-                #     continue
-            reqticksize = self.ticksize[tradeinfo[1]]
-            reqstepsize = self.stepsize[tradeinfo[1]]
-            quant =  "{:0.0{}f}".format(quant,reqstepsize)
-            target_price = "{:0.0{}f}".format(float(tradeinfo[3].replace(",","")),reqticksize)
-            if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]]==2 and not isOpen):
-                try:
-                    tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    rvalue = self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="MARKET",quantity=quant)
-                    logger.info(f"{self.uname} opened order.")
-                    positionKey = tradeinfo[1] + positionSide
-                    t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[1],positionKey,isOpen,uname))
-                    t1.start()
-                except BinanceAPIException as e:
-                    logger.error(e)
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
-            else:
-                try:
-                    target_price = float(target_price)
-                    if positionSide == "LONG":
-                        target_price = min(latest_price,target_price) 
-                    else:
-                        target_price = max(latest_price,target_price)
-                except:
-                    pass
-                target_price = "{:0.0{}f}".format(float(target_price),reqticksize)
-                try:
-                    tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
-                    rvalue = self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
-                    logger.info(f"{self.uname} opened order.")
-                    positionKey = tradeinfo[1] + positionSide
-                    t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[1],positionKey,isOpen,uname))
-                    t1.start()
-                except BinanceAPIException as e:
-                    logger.error(e)
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
+                    target_price = "{:0.0{}f}".format(float(target_price),reqticksize)
+                    try:
+                        tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                        rvalue = self.client.futures_create_order(symbol=tradeinfo[1],side=side,positionSide=positionSide,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
+                        logger.info(f"{self.uname} opened order.")
+                        positionKey = tradeinfo[1] + positionSide
+                        t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[1],positionKey,isOpen,uname))
+                        t1.start()
+                    except BinanceAPIException as e:
+                        logger.error(e)
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
+        except:
+            updater.bot.sendMessage(chat_id=self.chat_id,text="There is some error regarding this trade. Contact your administrator.")    
         return allquant
 
     def reload(self):
@@ -1814,21 +1817,21 @@ def main() -> None:
     #(self,url,name,toTrade,tmode=None,lmode=None):
     #save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
     #{"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
-    with open("userdata.pickle","rb") as f:
-        userdata = pickle.load(f)
-    for x in userdata:
-        UserLocks[x['chat_id']] = threading.Lock()
-        if not x['profiles'][0]['trade']:
-            CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'])
-        else:
-            CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'],x['profiles'][0]['tmodes']['BTCUSDT'],x['profiles'][0]['lmode'])
-        for i in range(1,len(x['profiles'])):
-            if not x['profiles'][i]['trade']:
-                CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
-            else:
-                CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],x['profiles'][i]['tmodes']['BTCUSDT'],x['profiles'][i]['lmode'])
-    for x in userdata:
-        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. Please initialize with /start again as there are new settings.")
+    # with open("userdata.pickle","rb") as f:
+    #     userdata = pickle.load(f)
+    # for x in userdata:
+    #     UserLocks[x['chat_id']] = threading.Lock()
+    #     if not x['profiles'][0]['trade']:
+    #         CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'])
+    #     else:
+    #         CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,x['profiles'][0]['url'],x['profiles'][0]['name'],x['api_key'],x['api_secret'],x['profiles'][0]['trade'],x['profiles'][0]['tmodes']['BTCUSDT'],x['profiles'][0]['lmode'])
+    #     for i in range(1,len(x['profiles'])):
+    #         if not x['profiles'][i]['trade']:
+    #             CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
+    #         else:
+    #             CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],x['profiles'][i]['tmodes']['BTCUSDT'],x['profiles'][i]['lmode'])
+    # for x in userdata:
+    #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. Please initialize with /start again as there are new settings.")
         
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
