@@ -696,10 +696,10 @@ def trade_confirm(update: Update, context: CallbackContext):
     else:
         context.user_data['toTrade'] = False
         if context.user_data['First']:
-            t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['safe_ratio'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],-1,-1))###CEHCK
+            t1 = threading.Thread(target=initTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['safe_ratio'],context.user_data['url'],context.user_data['name'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['toTrade'],-1,-1))
             t1.start()
         else:
-            t1 = threading.Thread(target=addTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['toTrade'],-1,-1))
+            t1 = threading.Thread(target=addTraderThread,args=(update.message.chat_id,context.user_data['uname'],context.user_data['url'],context.user_data['name'],context.user_data['toTrade'],-1,-1,-1,-1))
             t1.start()
         return ConversationHandler.END
     update.message.reply_text("Please select the default trading mode:")
