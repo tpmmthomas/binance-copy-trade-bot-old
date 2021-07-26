@@ -1461,6 +1461,7 @@ class BinanceClient:
                     return
                 elif result['status'] in ["CANCELED","PENDING_CANCEL","REJECTED","EXPIRED"]:
                     updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) is cancelled/rejected.")
+                    return
                 elif result['status'] == "PARTIALLY_FILLED":
                     updatedQty = float(result['executedQty']) - executed_qty
                     if isOpen:
