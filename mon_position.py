@@ -1668,7 +1668,7 @@ class BinanceClient:
                 qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity="qty")
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1677,7 +1677,7 @@ class BinanceClient:
                 qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity="qty")
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1687,7 +1687,7 @@ class BinanceClient:
                 qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity="qty")
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1696,10 +1696,11 @@ class BinanceClient:
                 qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity="qty")
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
+        return
 
     def query_trade(self,orderId,symbol,positionKey,isOpen,uname,takeProfit,stopLoss,Leverage): #ONLY to be run as thread
         numTries = 0
@@ -1720,7 +1721,10 @@ class BinanceClient:
                         else:
                             CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = float(result['executedQty'])
                         UserLocks[self.chat_id].release()
-                        self.tpsl_trade(symbol,result['side'],result['positionSide'],float(result['executedQty']),float(result['avgPrice']),Leverage,takeProfit,stopLoss)
+                        try:
+                            self.tpsl_trade(symbol,result['side'],result['positionSide'],float(result['executedQty']),float(result['avgPrice']),Leverage,takeProfit,stopLoss)
+                        except:
+                            return
                     else:
                         idx = CurrentUsers[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire() #needed bc run as thread
@@ -2140,8 +2144,8 @@ def main() -> None:
                 CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
             else:
                 CurrentUsers[x['chat_id']].add_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],-1,-1,x['profiles'][i]['tmodes']['BTCUSDT'],x['profiles'][i]['lmode'])
-    for x in userdata:
-        updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. You should start receiving notifications now. Remember to change necessary settings.")
+    # for x in userdata:
+    #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. You should start receiving notifications now. Remember to change necessary settings.")
         
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
