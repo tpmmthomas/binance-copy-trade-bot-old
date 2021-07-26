@@ -1,4 +1,3 @@
-from re import T
 import constants as cnt
 import logging
 
