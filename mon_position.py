@@ -1662,41 +1662,43 @@ class BinanceClient:
 
     def tpsl_trade(self,symbol,side,positionSide,qty,excprice,leverage,tp,sl): #make sure everything in numbers not text//side: original side
         side = "BUY" if side == "SELL" else "SELL"
+        logger.info(f"Debug Check {leverage}/{tp}/{sl}")
         if positionSide == "LONG":
             if tp != -1:
-                tpPrice = excprice * (1+(tp/leverage)/100)
-                qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
-                tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
+                tpPrice1 = excprice * (1+(tp/leverage)/100)
+                qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
+                tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
             if sl != -1:
-                tpPrice = excprice * (1-(sl/leverage)/100)
-                qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
-                tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
+                print("HI")
+                tpPrice2 = excprice * (1-(sl/leverage)/100)
+                qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
+                tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
         else:
             if tp != -1:
-                tpPrice = excprice * (1-(tp/leverage)/100)
-                qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
-                tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
+                tpPrice1 = excprice * (1-(tp/leverage)/100)
+                qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
+                tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
             if sl != -1:
-                tpPrice = excprice * (1+(sl/leverage)/100)
-                qty = "{:0.0{}f}".format(qty,self.stepsize[symbol])
-                tpPrice = "{:0.0{}f}".format(tpPrice,self.ticksize[symbol])
+                tpPrice2 = excprice * (1+(sl/leverage)/100)
+                qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
+                tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice,workingType="MARK_PRICE",quantity=qty)
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
