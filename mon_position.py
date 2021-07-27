@@ -122,8 +122,16 @@ class FetchLatestPosition(threading.Thread):
             self.tmodes = {}
             self.needtmode = True
         if toTrade:
-            self.take_profit_percent = {}
-            self.stop_loss_percent = {}
+            self.needtp = False
+            self.needsl = False
+            self.take_profit_percent = tp
+            if isinstance(tp,int):
+                self.take_profit_pecent = {}
+                self.needtp = True
+            self.stop_loss_percent = sl
+            if isinstance(sl,int):
+                self.stop_loss_percent = {}
+                self.needsl = True
             self.proportion = proportion
             self.leverage = leverage
             if self.proportion is None:
@@ -140,8 +148,10 @@ class FetchLatestPosition(threading.Thread):
                     self.leverage[symbol] = 20
                 if self.needtmode:
                     self.tmodes[symbol] = tmode
-                self.take_profit_percent[symbol] = tp
-                self.stop_loss_percent[symbol] = sl
+                if self.needtp:
+                    self.take_profit_percent[symbol] = tp
+                if self.needsl:
+                    self.stop_loss_percent[symbol] = sl
     
     def get_trader_profile(self):
         if self.toTrade:
@@ -1678,7 +1688,7 @@ class BinanceClient:
                 qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symWbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1972,7 +1982,7 @@ def restore_save_data():
             if not x['profiles'][i]['trade']:
                 CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
             else:
-                CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],-1,-1,x['profiles'][i]['tmodes'],x['profiles'][i]['lmode'],x['profiles'][i]['proportion'],x['profiles'][i]['leverage'],x['profiles'][i]['positions'])
+                CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],x['profiles'][i]['tp'],x['profiles'][i]['sl'],x['profiles'][i]['tmodes'],x['profiles'][i]['lmode'],x['profiles'][i]['proportion'],x['profiles'][i]['leverage'],x['profiles'][i]['positions'])
     return
 
 def main() -> None:
