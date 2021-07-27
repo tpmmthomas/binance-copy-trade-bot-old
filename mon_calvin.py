@@ -23,7 +23,7 @@ from telegram.ext import (
     ConversationHandler,
     CallbackContext,
 )
-from ast import literal_eval
+import json
 q = queue.Queue(200)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
@@ -52,7 +52,7 @@ class getStreamData(threading.Thread):
             if buffer is False:
                 time.sleep(5)
             else:
-                buffer = literal_eval(buffer)
+                buffer = json.loads(buffer)
                 if buffer["e"] == "ORDER_TRADE_UPDATE":
                     if  buffer["o"]["X"] == "FILLED":
                         while q.full():
