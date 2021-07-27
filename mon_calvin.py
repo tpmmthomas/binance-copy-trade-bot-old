@@ -112,11 +112,9 @@ class FetchLatestPosition(threading.Thread):
         self.error = 0
         self.toTrade = toTrade
         self.positions= positions
-        self.tmodes = tmode
+        self.tmodes = {}
         if self.positions is None:
             self.positions = {}
-        if self.tmodes is None:
-            self.tmodes = {}
         if toTrade:
             self.take_profit_percent = {}
             self.stop_loss_percent = {}
@@ -136,7 +134,7 @@ class FetchLatestPosition(threading.Thread):
     
     def get_trader_profile(self):
         if self.toTrade:
-            return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"tp":self.take_profit_percent,"sl":self.stop_loss_percent,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
+            return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
         return {"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade}
 
     def changes(self,df,df2):
@@ -1782,11 +1780,10 @@ class BinanceClient:
                 pass
 
     def open_trade(self,df,uname,proportion,leverage,lmode,tmodes,positions,takeProfit,stopLoss):
-        self.reload()
         df = df.values
-        allquant = []     
+        allquant = []
+        isOpen = False
         for tradeinfo in df:
-            isOpen = False
             types = tradeinfo[0].upper()
             if types[:4] == "OPEN":
                 isOpen = True
@@ -1904,21 +1901,17 @@ class BinanceClient:
         return
 
 class users:
-    def __init__(self,chat_id,uname,safety_ratio,init_trader=None,trader_name=None,api_key=None,api_secret=None,toTrade=None,tp=None,sl=None,tmode=None,lmode=None):
+    def __init__(self,chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tp=None,sl=None,tmode=None,lmode=None):
         self.chat_id = chat_id
+        self.trader_urls = [init_trader]
+        self.trader_names = [trader_name] 
+        self.threads = []
         self.is_handling = False
         self.uname = uname
-        self.api_key = api_key #actually required, but I don't want to change 
-        self.threads = []
+        self.api_key = api_key
         self.api_secret = api_secret
         self.bclient = BinanceClient(chat_id,uname,safety_ratio,api_key,api_secret)
         listsymbols = self.bclient.get_symbols()
-        if init_trader is None:
-            self.trader_urls = []
-            self.trader_names = []
-            return
-        self.trader_urls = [init_trader]
-        self.trader_names = [trader_name] 
         if toTrade:
             thr = FetchLatestPosition(listsymbols,init_trader,chat_id,trader_name,uname,toTrade,tp,sl,tmode,lmode) 
         else:
@@ -1936,17 +1929,6 @@ class users:
             thr = FetchLatestPosition(listsymbols,url,self.chat_id,name,self.uname,toTrade)
         thr.start()
         self.threads.append(thr)
-    
-    def restore_trader(self,fetch_url,name,toTrade,tp=-1,sl=-1,tmode=None,lmode=None,proportion=None,leverage=None,positions=None):
-        self.trader_urls.append(fetch_url)
-        self.trader_names.append(name)
-        listSymbols = self.bclient.get_symbols()
-        if toTrade:
-            thr = FetchLatestPosition(listSymbols,fetch_url,self.chat_id,name,self.uname,toTrade,tp,sl,tmode,lmode,proportion,leverage,positions)
-        else:
-            thr = FetchLatestPosition(listSymbols,fetch_url,self.chat_id,name,self.uname,toTrade)
-        thr.start()
-        self.threads.append(thr)
 
     def delete_trader(self,idx):
         self.trader_urls.pop(idx)
@@ -1955,18 +1937,6 @@ class users:
         self.threads.pop(idx)
 
 def restore_save_data():
-    #(self,listSymbols,fetch_url,chat_id,name,uname,toTrade,tp=-1,sl=-1,tmode=None,lmode=None,proportion=None,leverage=None,positions=None):
-    #{"chat_id":user.chat_id,"profiles":traderProfiles,"safety_ratrio":user.bclient.safety_ratio,"api_key":user.api_key,"api_secret":user.api_secret})
-    with open("userdata.pickle","rb") as f:
-        userdata = pickle.load(f)
-    for x in userdata:
-        UserLocks[x['chat_id']] = threading.Lock()
-        CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,api_key=x['api_key'],api_secret=x['api_secret'])
-        for i in range(0,len(x['profiles'])):
-            if not x['profiles'][i]['trade']:
-                CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
-            else:
-                CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'],-1,-1,x['profiles'][i]['tmodes'],x['profiles'][i]['lmode'],x['profiles'][i]['proportion'],x['profiles'][i]['leverage'],x['profiles'][i]['positions'])
     return
 
 def main() -> None:
@@ -2168,14 +2138,8 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("help", help_command))
     #TODO: add /end command
     # Start the Bot
-    #chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None)
-    #(self,url,name,toTrade,tmode=None,lmode=None):
-    #save_items.append({"chat_id":user.chat_id,"profiles":traderProfiles,"api_key":user.api_key,"api_secret":user.api_secret})
-    #{"url":self.fetch_url,"name":self.name,"uname":self.uname,"trade":self.toTrade,"tmodes":self.tmodes,"lmode":self.lmode,"proportion":self.proportion,"leverage":self.leverage,"positions":self.positions}
-    #chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tp=None,sl=None,tmode=None,lmode=None):
-     # for x in userdata:
-    #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. You should start receiving notifications now. Remember to change necessary settings.")
-    restore_save_data()
+
+        
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
 
