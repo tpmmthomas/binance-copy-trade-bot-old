@@ -113,10 +113,14 @@ class FetchLatestPosition(threading.Thread):
         self.toTrade = toTrade
         self.positions= positions
         self.tmodes = tmode
+        self.needprop = False
+        self.needlev = False
+        self.needtmode = False
         if self.positions is None:
             self.positions = {}
-        if self.tmodes is None:
+        if self.tmodes is None or isinstance(self.tmodes,int):
             self.tmodes = {}
+            self.needtmode = True
         if toTrade:
             self.take_profit_percent = {}
             self.stop_loss_percent = {}
@@ -124,13 +128,18 @@ class FetchLatestPosition(threading.Thread):
             self.leverage = leverage
             if self.proportion is None:
                 self.proportion = {}
+                self.needprop = True
             if self.leverage is None:
                 self.leverage = {}
+                self.needlev = True
             self.lmode = lmode
             for symbol in listSymbols:
-                self.proportion[symbol] = 0
-                self.leverage[symbol] = 20
-                self.tmodes[symbol] = tmode
+                if self.needprop:
+                    self.proportion[symbol] = 0
+                if self.needlev:
+                    self.leverage[symbol] = 20
+                if self.needtmode:
+                    self.tmodes[symbol] = tmode
                 self.take_profit_percent[symbol] = tp
                 self.stop_loss_percent[symbol] = sl
     
@@ -1149,7 +1158,6 @@ def proportion_choosetrader(update: Update, context: CallbackContext):
         update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
         return ConversationHandler.END
     context.user_data['idx'] = idx
-    print("Hi")
     UserLocks[update.message.chat_id].acquire()
     listsymbols = user.bclient.get_symbols()
     UserLocks[update.message.chat_id].release()
@@ -1545,7 +1553,6 @@ def tpsl_choosetrader(update: Update, context: CallbackContext):
         update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
         return ConversationHandler.END
     context.user_data['idx'] = idx
-    print("Hi")
     UserLocks[update.message.chat_id].acquire()
     listsymbols = user.bclient.get_symbols()
     UserLocks[update.message.chat_id].release()
@@ -1671,12 +1678,11 @@ class BinanceClient:
                 qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    self.client.futures_create_order(symWbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
             if sl != -1:
-                print("HI")
                 tpPrice2 = excprice * (1-(sl/leverage)/100)
                 qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
