@@ -1684,6 +1684,7 @@ def mute_choosetrader(update: Update, context: CallbackContext):
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
     CurrentUsers[update.message.chat_id].threads[idx].mute = True
+    update.message.reply_text("Success!")
     return ConversationHandler.END
 
 def unmute_trader(update: Update, context: CallbackContext):
@@ -1705,13 +1706,14 @@ def unmute_trader(update: Update, context: CallbackContext):
 
 def unmute_choosetrader(update: Update, context: CallbackContext):
     user = CurrentUsers[update.message.chat_id]
-    logger.info(f"User {user.uname} muting trader.")
+    logger.info(f"User {user.uname} unmuting trader.")
     try:
         idx = user.trader_names.index(update.message.text)
     except:
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
     CurrentUsers[update.message.chat_id].threads[idx].mute = False
+    update.message.reply_text("Success!")
     return ConversationHandler.END
 
 
