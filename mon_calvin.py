@@ -77,7 +77,8 @@ class getStreamData(threading.Thread):
         for pos in result:
             if float(pos['positionAmt']) != 0:
                 symbol.append(pos['symbol'])
-                tsize = pos['positionAmt'] if pos['positionSide'] == "LONG" else "-"+pos['positionAmt']
+                pside = "LONG" if (float(pos['markPrice'])-float(pos['entryPrice']))/float(pos['unRealizedProfit']) > 0 else "SHORT"
+                tsize = pos['positionAmt'] if pside == "LONG" else "-"+pos['positionAmt']
                 size.append(tsize)
                 EnPrice.append(pos['entryPrice'])
                 MarkPrice.append(pos['markPrice'])
