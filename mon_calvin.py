@@ -85,7 +85,7 @@ class getStreamData(threading.Thread):
                 margin.append(pos['leverage'])
                 for user in current_users:
                     if current_users[user].lmode == 0:
-                        user.leverage[pos['symbol']] = pos['leverage']
+                        current_users[user].leverage[pos['symbol']] = pos['leverage']
         if len(symbol) > 0:
             return pd.DataFrame({'symbol':symbol,'size':size,"Entry Price":EnPrice,"Mark Price":MarkPrice,"PNL":PNL,"leverage":margin}).to_string()
         return "No Positions."
