@@ -311,7 +311,7 @@ class FetchLatestPosition(threading.Thread):
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
-            time.sleep(self.error*2)
+            time.sleep(self.error*3)
             if self.error >=30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:

@@ -75,7 +75,7 @@ class getStreamData(threading.Thread):
         PNL = []
         margin = []
         for pos in result:
-            if pos['positionAmt'] != 0:
+            if float(pos['positionAmt']) != 0:
                 symbol.append(pos['symbol'])
                 tsize = pos['positionAmt'] if pos['positionSide'] == "LONG" else "-"+pos['positionAmt']
                 size.append(tsize)
