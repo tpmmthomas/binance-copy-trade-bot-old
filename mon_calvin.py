@@ -84,6 +84,9 @@ class getStreamData(threading.Thread):
                 MarkPrice.append(pos['markPrice'])
                 PNL.append(pos['unRealizedProfit'])
                 margin.append(pos['leverage'])
+                for user in current_users:
+                    if user.lmode == 0:
+                        user.leverage[pos['symbol']] = pos['leverage']
         if len(symbol) > 0:
             return pd.DataFrame({'symbol':symbol,'size':size,"Entry Price":EnPrice,"Mark Price":MarkPrice,"PNL":PNL,"leverage":margin}).to_string()
         return "No Positions."
@@ -104,7 +107,9 @@ def get_newest_trade():
         else:
             side = "OpenShort" if side == "SELL" else "CloseShort"
         price = result["ap"]
+        pos = current_stream.get_positions()
         for chat_id in current_users:
+            updater.bot.sendMessage(chat_id=chat_id,text=f"The updated position:\n{pos}")
             updater.bot.sendMessage(chat_id=chat_id,text=f"The following trade is executed:\nSymbol: {symbol}\nType: {type}\nside: {side}\nExcPrice: {price}\nQuantity: {qty}")
             current_users[chat_id].open_trade(result)
 
@@ -411,18 +416,7 @@ def get_proportion(update: Update, context: CallbackContext):
         return ConversationHandler.END
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} querying proportion.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    listsymbols = user.get_symbols()
     listsymbols = [[x] for x in listsymbols]
     update.message.reply_text("Please choose the symbol.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
     return REALSETLEV4
@@ -430,50 +424,35 @@ def get_proportion(update: Update, context: CallbackContext):
 def getproportionReal(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     symbol = update.message.text
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    listsymbols = user.get_symbols()
     if symbol not in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
         return REALSETLEV4
-    idx = context.user_data['idx']
-    result = user.threads[idx].get_proportion(symbol)
-    update.message.reply_text(f"The proportion set for {user.threads[idx].name}, {symbol} is {result}x.")
+    result = user.get_proportion(symbol)
+    update.message.reply_text(f"The proportion set for {user.name}, {symbol} is {result}x.")
+    return ConversationHandler.END
+
+def end_all(update:Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+        return
+    logger.info("%s ended the service.",update.message.from_user.first_name)
+    update.message.reply_text("Confirm ending the service? This means that we will not make trades for you anymore and you have to take care of the positions previously opened by yourself. Type 'yes' to confirm, /cancel to cancel.")
+    return COCO
+
+def realEndAll(update:Update, context: CallbackContext):
+    del current_users[update.message.chat_id]
+    update.message.reply_text("Sorry to see you go. You can press /start to restart the service.")
     return ConversationHandler.END
 
 def set_omode(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    if current_users[update.message.chat_id].is_handling:
-        update.message.reply_text("You are adding another trader, wait for it to complete first!")
-        return ConversationHandler.END
-    listtraders = current_users[update.message.chat_id].trader_names
-    if len(listtraders) == 0:
-        update.message.reply_text("You are not following any traders.")
-        return ConversationHandler.END
-    listtraders = split(listtraders,len(listtraders)//2)
-    update.message.reply_text("Please choose the trader to set trading mode for.\n(/cancel to cancel)",
-        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
-        )
-    return PROPTRADER2
-
-def omode_choosetrader(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} adjusting tmode.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    listsymbols = user.get_symbols()
     listsymbols = [[x] for x in listsymbols]
     update.message.reply_text("Please choose the symbol to set.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
     return PROPSYM2
@@ -481,9 +460,7 @@ def omode_choosetrader(update: Update, context: CallbackContext):
 def omode_choosesymbol(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     context.user_data['symbol'] = update.message.text
-    UserLocks[update.message.chat_id].acquire()
     listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
     if update.message.text not in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
@@ -503,40 +480,16 @@ def setomodeReal(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trading mode, please enter again.")
         return REALSETPROP3
-    idx = context.user_data['idx'] 
     symbol = context.user_data['symbol']
-    user.threads[idx].change_tmode(symbol,tmode)
+    user.change_tmode(symbol,tmode)
     return ConversationHandler.END
 
 def set_lmode(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    if current_users[update.message.chat_id].is_handling:
-        update.message.reply_text("You are adding another trader, wait for it to complete first!")
-        return ConversationHandler.END
-    listtraders = current_users[update.message.chat_id].trader_names
-    if len(listtraders) == 0:
-        update.message.reply_text("You are not following any traders.")
-        return ConversationHandler.END
-    listtraders = split(listtraders,len(listtraders)//2)
-    update.message.reply_text("Please choose the trader to set leverage mode for.\n(/cancel to cancel)",
-        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
-        )
-    return LEVTRADER4
-
-def setlmode_choosetrader(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} setting leverage mode.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
     update.message.reply_text("Please choose the leverage mode.")
     update.message.reply_text("0. FOLLOW: You will follow the same leverage as the trader. However, note that the leverage is only an estimate. In case the leverage information cannot be obtained, we would look at the trader's history leverage on the given symbol to determine the leverage. If that was not available as well, a default of 20x leverage would be used.") 
     update.message.reply_text("1. FIXED: You can fix your own leverage settings within this bot for every (trader,symbol) combination. Once we place an order, the leverage set by you will be used regardless of the trader's leverage. Default is 20x and can be changed later.")
@@ -552,8 +505,7 @@ def setlmodeReal(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trading mode, please enter again.")
         return REALSETLEV5
-    idx = context.user_data['idx']
-    result = user.threads[idx].change_lmode(lmode)
+    user.change_lmode(lmode)
     update.message.reply_text(f"Successfully changed leverage mode!")
     return ConversationHandler.END
 
@@ -561,31 +513,8 @@ def set_allomode(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    if current_users[update.message.chat_id].is_handling:
-        update.message.reply_text("You are adding another trader, wait for it to complete first!")
-        return ConversationHandler.END
-    listtraders = current_users[update.message.chat_id].trader_names
-    if len(listtraders) == 0:
-        update.message.reply_text("You are not following any traders.")
-        return ConversationHandler.END
-    listtraders = split(listtraders,len(listtraders)//2)
-    update.message.reply_text("Please choose the trader to set trading mode for.\n(/cancel to cancel)",
-        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
-        )
-    return LEVTRADER5
-
-def allomode_choosetrader(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} setting trading mode.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
     update.message.reply_text("Please enter the target trading mode.")
     update.message.reply_text("0. MARKET: Once we detected a change in position, you will make an order immediately at the market price. As a result, your entry price might deviate from the trader's entry price (especially when there are significant market movements).") 
     update.message.reply_text("1. LIMIT: You will make an limit order at the same price as the trader's estimated entry price. However, due to fluctuating market movements, your order might not be fulfilled.")
@@ -601,8 +530,7 @@ def setallomodeReal(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trading mode, please enter again.")
         return REALSETLEV6
-    idx = context.user_data['idx']
-    user.threads[idx].change_all_tmode(tmode)
+    user.change_all_tmode(tmode)
     update.message.reply_text(f"Successfully changed trading mode!")
     return ConversationHandler.END
     
@@ -620,40 +548,15 @@ def confirm_changesafety(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid ratio, please enter again.")
         return LEVTRADER6
-    UserLocks[update.message.chat_id].acquire()
-    current_users[update.message.chat_id].bclient.change_safety_ratio(safety_ratio)
-    UserLocks[update.message.chat_id].release()
+    current_users[update.message.chat_id].change_safety_ratio(safety_ratio)
     return ConversationHandler.END
 
 def set_all_tpsl(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    if current_users[update.message.chat_id].is_handling:
-        update.message.reply_text("You are adding another trader, wait for it to complete first!")
-        return ConversationHandler.END
-    listtraders = current_users[update.message.chat_id].trader_names
-    if len(listtraders) == 0:
-        update.message.reply_text("You are not following any traders.")
-        return ConversationHandler.END
-    listtraders = split(listtraders,len(listtraders)//2)
-    update.message.reply_text("Please choose the trader to set take profit/stop loss for all symbols.\n(/cancel to cancel)",
-        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
-        )
-    return ALLPROP2
-
-def setAllTpsl(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} adjusting TPSL.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
     update.message.reply_text("Please enter the the target Take profit/stop loss percentage, separated by space.\n(e.g. 200 300 => take profit=200%, stop loss=300%)")
     return REALSETPROP4
 
@@ -668,8 +571,7 @@ def setAllTpslReal(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("The percentage is invalid, please enter again.")
         return REALSETPROP4
-    idx = context.user_data['idx'] 
-    user.threads[idx].change_all_tpsl(tp,sl)
+    user.change_all_tpsl(tp,sl)
     update.message.reply_text("Take profit/stop loss ratio adjusted successfully!!!")
     return ConversationHandler.END
 
@@ -677,34 +579,9 @@ def set_tpsl(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    if current_users[update.message.chat_id].is_handling:
-        update.message.reply_text("You are adding another trader, wait for it to complete first!")
-        return ConversationHandler.END
-    listtraders = current_users[update.message.chat_id].trader_names
-    if len(listtraders) == 0:
-        update.message.reply_text("You are not following any traders.")
-        return ConversationHandler.END
-    listtraders = split(listtraders,len(listtraders)//2)
-    update.message.reply_text("Please choose the trader to set take profit/stop loss percentage for.\n(/cancel to cancel)",
-        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
-        )
-    return PROPTRADER3
-
-def tpsl_choosetrader(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
-    logger.info(f"User {user.uname} adjusting proportion.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    logger.info(f"User {user.uname} adjusting TPSL.")
+    listsymbols = user.get_symbols()
     listsymbols = [[x] for x in listsymbols]
     update.message.reply_text("Please choose the symbol to set.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
     return PROPSYM3
@@ -712,9 +589,7 @@ def tpsl_choosetrader(update: Update, context: CallbackContext):
 def tpsl_choosesymbol(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     context.user_data['symbol'] = update.message.text
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    listsymbols = user.get_symbols()
     if update.message.text not in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
@@ -733,9 +608,8 @@ def setTpslReal(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("The percentage is invalid, please enter again.")
         return REALSETPROP5
-    idx = context.user_data['idx'] 
     symbol = context.user_data['symbol']
-    user.threads[idx].change_tpsl(symbol,tp,sl)
+    user.change_tpsl(symbol,tp,sl)
     update.message.reply_text("Percentages changed successfully.")
     return ConversationHandler.END
 
@@ -743,34 +617,9 @@ def get_tpsl(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    if current_users[update.message.chat_id].is_handling:
-        update.message.reply_text("You are adding another trader, wait for it to complete first!")
-        return ConversationHandler.END
-    listtraders = current_users[update.message.chat_id].trader_names
-    if len(listtraders) == 0:
-        update.message.reply_text("You are not following any traders.")
-        return ConversationHandler.END
-    listtraders = split(listtraders,len(listtraders)//2)
-    update.message.reply_text("Please choose the trader to query take profit/stop loss percentage for.\n(/cancel to cancel)",
-        reply_markup=ReplyKeyboardMarkup(listtraders,one_time_keyboard=True,input_field_placeholder="Which Trader?")
-        )
-    return LEVTRADER7
-
-def gettpsl_choosetrader(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} querying tpsl.")
-    try:
-        idx = user.trader_names.index(update.message.text)
-    except:
-        update.message.reply_text("This is not a valid trader.")
-        return ConversationHandler.END
-    if not user.threads[idx].toTrade:
-        update.message.reply_text("You did not set copy trade option for this trader. If needed, /delete this trader and /add again.")
-        return ConversationHandler.END
-    context.user_data['idx'] = idx
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    listsymbols = user.get_symbols()
     listsymbols = [[x] for x in listsymbols]
     update.message.reply_text("Please choose the symbol.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
     return REALSETLEV7
@@ -778,22 +627,20 @@ def gettpsl_choosetrader(update: Update, context: CallbackContext):
 def getTpslReal(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     symbol = update.message.text
-    UserLocks[update.message.chat_id].acquire()
-    listsymbols = user.bclient.get_symbols()
-    UserLocks[update.message.chat_id].release()
+    listsymbols = user.get_symbols()
     if symbol not in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text("Sorry, the symbol is not valid, please choose again.",reply_markup=ReplyKeyboardMarkup(listsymbols,one_time_keyboard=True,input_field_placeholder="Which Symbol?"))
         return REALSETLEV7
-    idx = context.user_data['idx']
-    tp,sl = user.threads[idx].get_tpsl(symbol)
-    update.message.reply_text(f"The take profit/stop loss percentage set for {user.threads[idx].name}, {symbol} is {tp}% and {sl}% respectively. (-1 means not set)")
+    tp,sl = user.get_tpsl(symbol)
+    update.message.reply_text(f"The take profit/stop loss percentage set for {user.name}, {symbol} is {tp}% and {sl}% respectively. (-1 means not set)")
     return ConversationHandler.END
 
 class userClient:
     def __init__(self,chat_id,uname,safety_ratio,api_key,api_secret,tp=None,sl=None,tmode=None,lmode=None,positions=None,proportion=None,Leverage=None):
         self.chat_id = chat_id
         self.uname = uname
+        self.name = "CalvinTsai"
         self.api_key = api_key
         self.api_secret = api_secret
         self.client = Client(api_key,api_secret)
@@ -993,7 +840,7 @@ class userClient:
             elif quant/self.positions[checkKey] > 0.95:
                 quant = max(self.positions[checkKey],quant)
         if quant == 0:
-            updater.bot.sendMessage(chat_id=self.chat_id,text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
+            updater.bot.sendMessage(chat_id=self.chat_id,text=f"{tradeinfo['S']} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
             return
         balance,collateral,coin = 0,0,""
         try:
@@ -1287,7 +1134,6 @@ def main():
     conv_handler11 = ConversationHandler(
         entry_points=[CommandHandler('getproportion',get_proportion)],
         states={
-            LEVTRADER3:[MessageHandler(Filters.text & ~Filters.command,getproportion_choosetrader)],
             REALSETLEV4:[MessageHandler(Filters.text & ~Filters.command,getproportionReal)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
@@ -1302,7 +1148,6 @@ def main():
     conv_handler13 = ConversationHandler(
         entry_points=[CommandHandler('settmode',set_omode)],
         states={
-            PROPTRADER2:[MessageHandler(Filters.text & ~Filters.command,omode_choosetrader)],
             PROPSYM2:[MessageHandler(Filters.text & ~Filters.command,omode_choosesymbol)],
             REALSETPROP3:[MessageHandler(Filters.regex('^(0|1|2)$'),setomodeReal)],
         },
@@ -1311,7 +1156,6 @@ def main():
     conv_handler14 = ConversationHandler(
         entry_points=[CommandHandler('setlmode',set_lmode)],
         states={
-            LEVTRADER4:[MessageHandler(Filters.text & ~Filters.command,setlmode_choosetrader)],
             REALSETLEV5:[MessageHandler(Filters.regex('^(0|1|2)$'),setlmodeReal)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
@@ -1319,7 +1163,6 @@ def main():
     conv_handler15 = ConversationHandler(
         entry_points=[CommandHandler('setalltmode',set_allomode)],
         states={
-            LEVTRADER5:[MessageHandler(Filters.text & ~Filters.command,allomode_choosetrader)],
             REALSETLEV6:[MessageHandler(Filters.regex('^(0|1|2)$'),setallomodeReal)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
@@ -1335,7 +1178,6 @@ def main():
     conv_handler17 = ConversationHandler(
         entry_points=[CommandHandler('setalltpsl',set_all_tpsl)],
         states={
-            ALLPROP2:[MessageHandler(Filters.text & ~Filters.command,setAllTpsl)],
             REALSETPROP4:[MessageHandler(Filters.text & ~Filters.command,setAllTpslReal)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
@@ -1343,7 +1185,6 @@ def main():
     conv_handler18 = ConversationHandler(
         entry_points=[CommandHandler('settpsl',set_tpsl)],
         states={
-            PROPTRADER3:[MessageHandler(Filters.text & ~Filters.command,tpsl_choosetrader)],
             PROPSYM3:[MessageHandler(Filters.text & ~Filters.command,tpsl_choosesymbol)],
             REALSETPROP5:[MessageHandler(Filters.text & ~Filters.command,setTpslReal)],
         },
@@ -1352,7 +1193,6 @@ def main():
     conv_handler19 = ConversationHandler(
         entry_points=[CommandHandler('gettpsl',get_tpsl)],
         states={
-            LEVTRADER7:[MessageHandler(Filters.text & ~Filters.command,gettpsl_choosetrader)],
             REALSETLEV7:[MessageHandler(Filters.text & ~Filters.command,getTpslReal)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
