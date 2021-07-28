@@ -1,4 +1,3 @@
-from mon_position import view_trader
 import os
 from telegram import chat
 import constants as cnt
@@ -92,6 +91,7 @@ class getStreamData(threading.Thread):
         return "No Positions."
 
 def get_newest_trade():
+    time.sleep(10)
     while True:
         while q.empty():
             time.sleep(1)
@@ -215,6 +215,7 @@ def sl_confirm(update: Update, context: CallbackContext):
         update.message.reply_text("Sorry but the percentage is not valid. Please enter again (integer between 0 and 400, or -1 if do not want to set)")
         return SL
     update.message.reply_text("You have successfully initialized :)")
+    context.user_data['sl'] = sl
     current_users[update.message.chat_id] = userClient(update.message.chat_id,context.user_data['uname'],context.user_data['safe_ratio'],context.user_data['api_key'],context.user_data['api_secret'],context.user_data['tp'],context.user_data['sl'],context.user_data['tmode'],context.user_data['lmode'])
     return ConversationHandler.END    
     
