@@ -413,6 +413,7 @@ class FetchLatestPosition(threading.Thread):
                 self.runtimes = 0
                 self.driver.quit()
                 self.driver = None
+            self.error = 0
             time.sleep(45)
         if self.driver is not None:
             self.driver.quit()
