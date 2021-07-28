@@ -84,7 +84,7 @@ class getStreamData(threading.Thread):
                 PNL.append(pos['unRealizedProfit'])
                 margin.append(pos['leverage'])
                 for user in current_users:
-                    if user.lmode == 0:
+                    if current_users[user].lmode == 0:
                         user.leverage[pos['symbol']] = pos['leverage']
         if len(symbol) > 0:
             return pd.DataFrame({'symbol':symbol,'size':size,"Entry Price":EnPrice,"Mark Price":MarkPrice,"PNL":PNL,"leverage":margin}).to_string()
@@ -243,7 +243,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
 
 def end_everyone(update:Update, context: CallbackContext):
     for user in current_users:
-        updater.bot.sendMessage(chat_id=user.chat_id,text="Your service has been force ended by admin.")
+        updater.bot.sendMessage(chat_id=user,text="Your service has been force ended by admin.")
     current_users = {}
     logger.info("Everyone's service has ended.")
     return ConversationHandler.END
