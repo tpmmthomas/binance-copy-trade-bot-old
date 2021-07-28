@@ -93,12 +93,14 @@ def automatic_reload():
 def start(update: Update, context: CallbackContext):
     if update.message.chat_id in current_users:
         update.message.reply_text("You have already initialized. No need to do it again.")
+        return
     update.message.reply_text("Thanks! you have been initialized.")
     current_users.append(update.message.chat_id)
 
 def end(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("You have already initialized. No need to do it again.")
+        return
     update.message.reply_text("Bye!")
     current_users.remove(update.message.chat_id)
 

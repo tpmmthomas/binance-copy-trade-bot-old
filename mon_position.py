@@ -112,26 +112,29 @@ class FetchLatestPosition(threading.Thread):
         self.error = 0
         self.toTrade = toTrade
         self.positions= positions
-        self.tmodes = tmode
+        self.tmodes = {}
         self.needprop = False
         self.needlev = False
         self.needtmode = False
         if self.positions is None:
             self.positions = {}
-        if self.tmodes is None or isinstance(self.tmodes,int):
-            self.tmodes = {}
+        if isinstance(tmode,int):
             self.needtmode = True
+        else:
+            self.tmodes = tmode
         if toTrade:
             self.needtp = False
             self.needsl = False
-            self.take_profit_percent = tp
+            self.take_profit_percent = {}
             if isinstance(tp,int):
-                self.take_profit_pecent = {}
                 self.needtp = True
-            self.stop_loss_percent = sl
+            else:
+                self.take_profit_percent = tp
+            self.stop_loss_percent = {}
             if isinstance(sl,int):
-                self.stop_loss_percent = {}
                 self.needsl = True
+            else:
+                self.stop_loss_percent = sl
             self.proportion = proportion
             self.leverage = leverage
             if self.proportion is None:
@@ -1977,7 +1980,7 @@ def restore_save_data():
         userdata = pickle.load(f)
     for x in userdata:
         UserLocks[x['chat_id']] = threading.Lock()
-        CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],0,api_key=x['api_key'],api_secret=x['api_secret'])
+        CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],x['safety_ratrio'],api_key=x['api_key'],api_secret=x['api_secret'])
         for i in range(0,len(x['profiles'])):
             if not x['profiles'][i]['trade']:
                 CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
