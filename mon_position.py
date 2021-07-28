@@ -349,7 +349,7 @@ class FetchLatestPosition(threading.Thread):
                     now = datetime.now()
                     if not self.mute:
                         tosend = f"Trader {self.name}, Current time: "+str(now)+"\nNo positions.\n"
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                        updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                     if not self.first_run:
                         txlist = self.changes(self.prev_df,"x")
                         if self.toTrade:
@@ -399,7 +399,7 @@ class FetchLatestPosition(threading.Thread):
                 now = datetime.now()
                 if not self.mute:
                     tosend = f"Trader {self.name}, Current time: "+str(now)+"\n"+output["time"]+"\n"+output["data"].to_string()+"\n"
-                updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 if not self.first_run:
                     txlist = self.changes(self.prev_df,output["data"])
                     if self.toTrade:
