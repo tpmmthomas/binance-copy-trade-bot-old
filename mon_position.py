@@ -313,10 +313,10 @@ class FetchLatestPosition(threading.Thread):
             isChanged = False
             time.sleep(self.error*2)
             if self.error >=30:
+                logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
                     tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
-                logger.info(f"{self.uname}: Error found in trader {self.name}.")
-                updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 self.error = 0
             if self.driver is None:
                 while True:
