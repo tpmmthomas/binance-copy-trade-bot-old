@@ -91,6 +91,7 @@ class getStreamData(threading.Thread):
         return "No Positions."
 
 def get_newest_trade():
+    global current_stream
     time.sleep(10)
     while True:
         while q.empty():
@@ -114,6 +115,7 @@ def get_newest_trade():
             current_users[chat_id].open_trade(result)
 
 def automatic_reload():
+    global current_stream
     while True:
         time.sleep(23*60*60)
         current_stream.stop()
@@ -279,6 +281,7 @@ def save_to_file(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def view_position(update:Update,context:CallbackContext):
+    global current_stream
     update.message.reply_text(current_stream.get_positions())
     return
 
@@ -1197,7 +1200,8 @@ def main():
             REALSETLEV7:[MessageHandler(Filters.text & ~Filters.command,getTpslReal)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
-    )    
+    )   
+    global current_stream 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler6)
