@@ -282,7 +282,9 @@ def save_to_file(update: Update, context: CallbackContext):
 
 def view_position(update:Update,context:CallbackContext):
     global current_stream
-    update.message.reply_text(current_stream.get_positions())
+    txt = current_stream.get_positions()
+    logger.info(f"Debug: {txt}")
+    updater.bot.sendMessage(chat_id=update.message.chat_id,text=txt)
     return
 
 def setAllLeverage(update: Update, context: CallbackContext):
