@@ -1734,7 +1734,7 @@ def change_secret(update: Update, context: CallbackContext):
     logger.info(f"User {user.uname} changing api keys.")
     update.message.reply_text("Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",parse_mode=telegram.ParseMode.MARKDOWN) 
     context.user_data['api_key'] = update.message.text
-    update.message.reply_text("Success!")
+
     return SEP2
 
 def change_bnall(update: Update, context: CallbackContext):
@@ -1742,6 +1742,7 @@ def change_bnall(update: Update, context: CallbackContext):
     user.api_key = context.user_data['api_key']
     user.api_secret = update.message.text
     user.bclient.change_keys(user.api_key,user.api_secret)
+    update.message.reply_text("Success!")
     return ConversationHandler.END
 
 class BinanceClient:
