@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 AUTH,SEP1,SEP2, COCO,TRADERURL,MUTE1,MUTE2,ALLPROP2,REALSETPROP4,LEVTRADER6,LEVTRADER7,REALSETLEV7,LEVTRADER3,REALSETLEV4,LEVTRADER4,REALSETLEV5,LEVTRADER5,REALSETLEV6, TRADERURL2, LEVTRADER2,REALSETLEV3,TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TP,SL,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2,PROPTRADER3,PROPSYM3,REALSETPROP5,PROPTRADER2,PROPSYM2,REALSETPROP3,SAFERATIO= range(50)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
+master_lock = threading.Lock()
+chrome_num = 0
 mutex = threading.Lock()
 options = webdriver.ChromeOptions()
 options.binary_location = cfg.chrome_location
@@ -318,10 +320,16 @@ class FetchLatestPosition(threading.Thread):
         return txs
 
     def run(self):
+        global chrome_num
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
             time.sleep(self.error*5)
+            while chrome_num >= 5:
+                time.sleep(1)
+            master_lock.acquire()
+            chrome_num += 1
+            master_lock.release()
             if self.error >=30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
@@ -342,8 +350,14 @@ class FetchLatestPosition(threading.Thread):
                     self.driver.refresh()
                 except:
                     self.error += 1
+                    master_lock.acquire()
+                    chrome_num -= 1
+                    master_lock.release()
                     time.sleep(60)
                     continue
+            master_lock.acquire()
+            chrome_num -= 1
+            master_lock.release()
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source,features="html.parser")
             x = soup.get_text()
@@ -2138,6 +2152,7 @@ def restore_save_data():
         else:
             CurrentUsers[x['chat_id']] = users(x['chat_id'],'anonymous',x['safety_ratrio'],api_key=x['api_key'],api_secret=x['api_secret'])
         for i in range(0,len(x['profiles'])):
+            time.sleep(5)
             if not x['profiles'][i]['trade']:
                 CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
             else:
