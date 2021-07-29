@@ -2152,7 +2152,7 @@ def restore_save_data():
         else:
             CurrentUsers[x['chat_id']] = users(x['chat_id'],'anonymous',x['safety_ratrio'],api_key=x['api_key'],api_secret=x['api_secret'])
         for i in range(0,len(x['profiles'])):
-            time.sleep(5)
+            time.sleep(1)
             if not x['profiles'][i]['trade']:
                 CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
             else:
