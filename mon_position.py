@@ -325,7 +325,7 @@ class FetchLatestPosition(threading.Thread):
         while not self.isStop.is_set():
             isChanged = False
             time.sleep(self.error*5)
-            while chrome_num >= 5:
+            while chrome_num >= 3:
                 time.sleep(1)
             master_lock.acquire()
             chrome_num += 1
