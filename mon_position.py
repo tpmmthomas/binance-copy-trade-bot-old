@@ -42,6 +42,10 @@ options.add_argument("--headless")
 options.add_argument("--disable-web-security")
 UserLocks = {}
 
+def round_up(n, decimals=0):
+    multiplier = 10 ** decimals
+    return math.ceil(n * multiplier) / multiplier
+
 def format_results(x,y):
     words = []
     prev_idx =  0
@@ -304,14 +308,14 @@ class FetchLatestPosition(threading.Thread):
                     executePrice.append(row['Entry Price'])
             txs = pd.DataFrame({"txType":txtype,"symbol":txsymbol,"size":txsize,"ExecPrice":executePrice})
         tosend = f"*The positions changed by the trader {self.name}:*\n"+txs.to_string()+"\n"
-        updater.bot.sendMessage(chat_id=self.chat_id,text=tosend,parse_mode=telegram.ParseMode.MARKDOWN)
+        updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
         return txs
 
     def run(self):
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
-            time.sleep(self.error*3)
+            time.sleep(self.error*3.5)
             if self.error >=30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
@@ -1754,7 +1758,13 @@ class BinanceClient:
                 qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    skey = symbol+positionSide
+                    if skey in CurrentUsers[self.chat_id].tpslids:
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
+                    else:
+                        CurrentUsers[self.chat_id].tpslids[skey] = []
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1763,7 +1773,13 @@ class BinanceClient:
                 qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    skey = symbol+positionSide
+                    if skey in CurrentUsers[self.chat_id].tpslids:
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
+                    else:
+                        CurrentUsers[self.chat_id].tpslids[skey] = []
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1773,7 +1789,13 @@ class BinanceClient:
                 qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    skey = symbol+positionSide
+                    if skey in CurrentUsers[self.chat_id].tpslids:
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
+                    else:
+                        CurrentUsers[self.chat_id].tpslids[skey] = []
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1782,7 +1804,13 @@ class BinanceClient:
                 qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    skey = symbol+positionSide
+                    if skey in CurrentUsers[self.chat_id].tpslids:
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
+                    else:
+                        CurrentUsers[self.chat_id].tpslids[skey] = []
+                        CurrentUsers[self.chat_id].tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -1819,6 +1847,15 @@ class BinanceClient:
                         else:
                             CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = 0
                         UserLocks[self.chat_id].release()
+                        #check positions thenn close all
+                        res = self.client.futures_position_information(symbol=symbol)
+                        for pos in res:
+                            if pos["positionSide"] == result['positionSide'] and float(pos['positionAmt']) == 0 and positionKey in CurrentUsers[self.chat_id].tpslids:
+                                idlist = CurrentUsers[self.chat_id].tpslids[positionKey]
+                                for i in range((len(idlist)-1)//10+1):
+                                    todoList = idlist[i*10:min((i+1)*10-1,len(idlist)-1)]
+                                    self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
+                                CurrentUsers[self.chat_id].tpslids[positionKey] = []
                     return
                 elif result['status'] in ["CANCELED","PENDING_CANCEL","REJECTED","EXPIRED"]:
                     updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) is cancelled/rejected.")
@@ -1898,7 +1935,7 @@ class BinanceClient:
                     quant = min(positions[checkKey],quant)
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.")
-                elif quant/positions[checkKey] > 0.95:
+                elif quant/positions[checkKey] > 0.9:
                     quant = max(positions[checkKey],quant)
             if quant == 0:
                 if not mute:
@@ -1931,7 +1968,8 @@ class BinanceClient:
                     continue
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
-            quant =  "{:0.0{}f}".format(quant,reqstepsize)
+            quant = round_up(quant,reqstepsize)
+            quant = str(quant)
             if isinstance(tradeinfo[3],str):
                 tradeinfo[3] = tradeinfo[3].replace(",","")
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
@@ -1998,6 +2036,7 @@ class users:
         self.uname = uname
         self.api_key = api_key #actually required, but I don't want to change 
         self.threads = []
+        self.tpslids = {}
         self.api_secret = api_secret
         self.bclient = BinanceClient(chat_id,uname,safety_ratio,api_key,api_secret)
         listsymbols = self.bclient.get_symbols()
