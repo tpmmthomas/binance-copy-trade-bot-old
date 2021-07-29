@@ -178,7 +178,7 @@ def disclaimer_check(update: Update, context: CallbackContext):
     # update.message.reply_text("Please provide your API Key from Binance.")
     # update.message.reply_text("*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",parse_mode=telegram.ParseMode.MARKDOWN)
     update.message.reply_text("You have succesfully subscribed! You will receive notifications soon.")
-    current_users[update.message.chat_id] = userClient(update.message.chat_id,context.user_data['uname'],0,0,0,0,0,0,0)
+    current_users[update.message.chat_id] = userClient(update.message.chat_id,context.user_data['uname'],'23','34')
     # return APIKEY
     return ConversationHandler.END
 
