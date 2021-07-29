@@ -2088,7 +2088,10 @@ def restore_save_data():
         userdata = pickle.load(f)
     for x in userdata:
         UserLocks[x['chat_id']] = threading.Lock()
-        CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],x['safety_ratrio'],api_key=x['api_key'],api_secret=x['api_secret'])
+        if len(x['profiles']) > 0:
+            CurrentUsers[x['chat_id']] = users(x['chat_id'],x['profiles'][0]['uname'],x['safety_ratrio'],api_key=x['api_key'],api_secret=x['api_secret'])
+        else:
+            CurrentUsers[x['chat_id']] = users(x['chat_id'],'anonymous',x['safety_ratrio'],api_key=x['api_key'],api_secret=x['api_secret'])
         for i in range(0,len(x['profiles'])):
             if not x['profiles'][i]['trade']:
                 CurrentUsers[x['chat_id']].restore_trader(x['profiles'][i]['url'],x['profiles'][i]['name'],x['profiles'][i]['trade'])
