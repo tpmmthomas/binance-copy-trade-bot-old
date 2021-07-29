@@ -1954,6 +1954,9 @@ class BinanceClient:
                     side = "SELL"
                 else:
                     side = "BUY"
+            if not tradeinfo[1] in proportion:
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol.")
+                continue
             quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
             checkKey = tradeinfo[1].upper()+positionSide
             if not isOpen and ((checkKey not in positions) or (positions[checkKey] < quant)):
