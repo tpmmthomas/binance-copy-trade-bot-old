@@ -321,7 +321,7 @@ class FetchLatestPosition(threading.Thread):
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
-            time.sleep(self.error*3.5)
+            time.sleep(self.error*5)
             if self.error >=30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
@@ -953,6 +953,8 @@ def realEndAll(update:Update, context: CallbackContext):
 
 def end_everyone(update:Update, context: CallbackContext):
     for user in CurrentUsers:
+        if user == update.message.chat_id:
+            continue
         user = CurrentUsers[user]
         for thread in user.threads:
             thread.stop()
