@@ -61,10 +61,12 @@ class getStreamData(threading.Thread):
             else:
                 buffer = json.loads(buffer)
                 if buffer["e"] == "ORDER_TRADE_UPDATE":
+                    logger.info(f"DEBUG: {buffer['o']['x']}")
                     if  buffer["o"]["X"] == "FILLED":
                         while q.full():
                             time.sleep(1)
                         q.put(buffer)
+                        logger.info("PUT INTO QUEUE")
                 logger.info(str(buffer))
 
     def stop(self):
@@ -104,6 +106,7 @@ def get_newest_trade():
     while True:
         while q.empty():
             time.sleep(1)
+        logger.info("Received new update.")
         result = q.get()
         result = result["o"]
         symbol = result["s"]
@@ -120,7 +123,7 @@ def get_newest_trade():
         for chat_id in current_users:
             updater.bot.sendMessage(chat_id=chat_id,text=f"The updated position:\n{pos}")
             updater.bot.sendMessage(chat_id=chat_id,text=f"The following trade is executed:\nSymbol: {symbol}\nType: {type}\nside: {side}\nExcPrice: {price}\nQuantity: {qty}")
-            current_users[chat_id].open_trade(result)
+            #current_users[chat_id].open_trade(result)
 
 def automatic_reload():
     global current_stream
@@ -291,7 +294,6 @@ def save_to_file(update: Update, context: CallbackContext):
 def view_position(update:Update,context:CallbackContext):
     global current_stream
     txt = current_stream.get_positions()
-    logger.info(f"Debug: {txt}")
     updater.bot.sendMessage(chat_id=update.message.chat_id,text=txt)
     return
 
