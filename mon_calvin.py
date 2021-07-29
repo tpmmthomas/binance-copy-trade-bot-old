@@ -38,6 +38,10 @@ updater = Updater(cnt.bot_token2)
 current_users = {}
 current_stream = None
 
+def round_up(n, decimals=0):
+    multiplier = 10 ** decimals
+    return math.ceil(n * multiplier) / multiplier
+
 class getStreamData(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -656,6 +660,7 @@ class userClient:
         self.client = Client(api_key,api_secret)
         self.stepsize = {}
         self.ticksize = {}
+        self.tpslids = {}
         self.safety_ratio = safety_ratio
         info = self.client.futures_exchange_info()
         try:
@@ -730,7 +735,13 @@ class userClient:
                 qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    skey = symbol+positionSide
+                    if skey in self.tpslids:
+                        self.tpslids[skey].append(result['orderId'])
+                    else:
+                        self.tpslids[skey] = []
+                        self.tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -739,7 +750,13 @@ class userClient:
                 qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    skey = symbol+positionSide
+                    if skey in self.tpslids:
+                        self.tpslids[skey].append(result['orderId'])
+                    else:
+                        self.tpslids[skey] = []
+                        self.tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -749,7 +766,13 @@ class userClient:
                 qty1 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice1 = "{:0.0{}f}".format(tpPrice1,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="TAKE_PROFIT_MARKET",stopPrice=tpPrice1,workingType="MARK_PRICE",quantity=qty1)
+                    skey = symbol+positionSide
+                    if skey in self.tpslids:
+                        self.tpslids[skey].append(result['orderId'])
+                    else:
+                        self.tpslids[skey] = []
+                        self.tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -758,7 +781,13 @@ class userClient:
                 qty2 = "{:0.0{}f}".format(qty,self.stepsize[symbol])
                 tpPrice2 = "{:0.0{}f}".format(tpPrice2,self.ticksize[symbol])
                 try:
-                    self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    result = self.client.futures_create_order(symbol=symbol,side=side,positionSide=positionSide,type="STOP_MARKET",stopPrice=tpPrice2,workingType="MARK_PRICE",quantity=qty2)
+                    skey = symbol+positionSide
+                    if skey in self.tpslids:
+                        self.tpslids[skey].append(result['orderId'])
+                    else:
+                        self.tpslids[skey] = []
+                        self.tpslids[skey].append(result['orderId'])
                 except BinanceAPIException as e:
                     logger.error(e)
                     updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
@@ -789,6 +818,14 @@ class userClient:
                             self.positions[positionKey] -= float(result['executedQty'])
                         else:
                             self.positions[positionKey] = 0
+                        res = self.client.futures_position_information(symbol=symbol)
+                        for pos in res:
+                            if pos["positionSide"] == result['positionSide'] and float(pos['positionAmt']) == 0 and positionKey in self.tpslids:
+                                idlist = self.tpslids[positionKey]
+                                for i in range((len(idlist)-1)//10+1):
+                                    todoList = idlist[i*10:min((i+1)*10-1,len(idlist)-1)]
+                                    self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
+                                self.tpslids[positionKey] = []
                     return
                 elif result['status'] in ["CANCELED","PENDING_CANCEL","REJECTED","EXPIRED"]:
                     updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) is cancelled/rejected.")
@@ -847,7 +884,7 @@ class userClient:
             elif self.positions[checkKey] < quant:
                 quant = min(self.positions[checkKey],quant)
                 updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.")
-            elif quant/self.positions[checkKey] > 0.95:
+            elif quant/self.positions[checkKey] > 0.9:
                 quant = max(self.positions[checkKey],quant)
         if quant == 0:
             updater.bot.sendMessage(chat_id=self.chat_id,text=f"{tradeinfo['S']} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
@@ -876,7 +913,8 @@ class userClient:
                 return
         reqticksize = self.ticksize[tradeinfo[1]]
         reqstepsize = self.stepsize[tradeinfo[1]]
-        quant =  "{:0.0{}f}".format(quant,reqstepsize)
+        quant = round_up(quant,reqstepsize)
+        quant = str(quant)
         target_price = "{:0.0{}f}".format(float(tradeinfo["ap"]),reqticksize)
         if self.tmodes[tradeinfo["s"]] == 0 or (self.tmodes[tradeinfo["s"]]==2 and not isOpen):
             try:
