@@ -353,7 +353,7 @@ class FetchLatestPosition(threading.Thread):
                     master_lock.acquire()
                     chrome_num -= 1
                     master_lock.release()
-                    time.sleep(60)
+                    time.sleep(45)
                     continue
             master_lock.acquire()
             chrome_num -= 1
@@ -383,7 +383,7 @@ class FetchLatestPosition(threading.Thread):
                 if self.num_no_data != 1:
                     self.prev_df = "x"
                     self.first_run = False
-                    time.sleep(60)
+                    time.sleep(45)
                 time.sleep(5)
                 self.runtimes += 1
                 if self.runtimes >=15:
@@ -438,7 +438,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            time.sleep(60)
+            time.sleep(45)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
