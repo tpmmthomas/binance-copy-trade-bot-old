@@ -324,7 +324,7 @@ class FetchLatestPosition(threading.Thread):
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
-            time.sleep(self.error*6)
+            time.sleep(self.error*5.5)
             while chrome_num >= 3:
                 time.sleep(1)
             master_lock.acquire()
