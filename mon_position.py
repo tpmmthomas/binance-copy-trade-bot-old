@@ -1990,8 +1990,8 @@ class BinanceClient:
                     quant = min(positions[checkKey],quant)
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.")
-                elif quant/positions[checkKey] > 0.9:
-                    quant = max(positions[checkKey],quant)
+            elif not isOpen and quant/positions[checkKey] > 0.9:
+                quant = max(positions[checkKey],quant)
             if quant == 0:
                 if not mute:
                     updater.bot.sendMessage(chat_id=self.chat_id,text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.")
