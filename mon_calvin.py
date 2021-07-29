@@ -37,6 +37,8 @@ updater = Updater(cnt.bot_token2)
 
 current_users = {}
 current_stream = None
+lastPositions = ""
+longOrShort = {}
 
 def round_up(n, decimals=0):
     multiplier = 10 ** decimals
@@ -61,8 +63,8 @@ class getStreamData(threading.Thread):
             else:
                 buffer = json.loads(buffer)
                 if buffer["e"] == "ORDER_TRADE_UPDATE":
-                    logger.info(f"DEBUG: {buffer['o']['x']}")
-                    if  buffer["o"]["X"] == "FILLED":
+                    logger.info(f"DEBUG: {buffer['o']['X']}")
+                    if  buffer["o"]["X"] == "NEW":
                         while q.full():
                             time.sleep(1)
                         q.put(buffer)
@@ -72,8 +74,11 @@ class getStreamData(threading.Thread):
     def stop(self):
         self.isStop.set()
     
-    def get_positions(self):
-        result = self.client.futures_position_information()
+def get_positions():
+    global lastPositions
+    while True:
+        time.sleep(5)
+        result = current_stream.client.futures_position_information()
         symbol = []
         size = []
         EnPrice = []
@@ -93,12 +98,14 @@ class getStreamData(threading.Thread):
                 MarkPrice.append(pos['markPrice'])
                 PNL.append(pos['unRealizedProfit'])
                 margin.append(pos['leverage'])
+                longOrShort[pos['symbol']] = pside
                 for user in current_users:
                     if current_users[user].lmode == 0:
                         current_users[user].leverage[pos['symbol']] = pos['leverage']
         if len(symbol) > 0:
-            return pd.DataFrame({'symbol':symbol,'size':size,"Entry Price":EnPrice,"Mark Price":MarkPrice,"PNL":PNL,"leverage":margin}).to_string()
-        return "No Positions."
+            lastPositions =  pd.DataFrame({'symbol':symbol,'size':size,"Entry Price":EnPrice,"Mark Price":MarkPrice,"PNL":PNL,"leverage":margin}).to_string()
+        else:
+            lastPositions =  "No Positions."
 
 def get_newest_trade():
     global current_stream
@@ -113,13 +120,18 @@ def get_newest_trade():
         side = result["S"]
         qty = result["l"]
         type = result["o"]
-        positionSide = result["ps"]
-        if positionSide == "LONG":
-            side = "OpenLong" if side == "BUY" else "CloseLong"
+        if side == "BUY" and not symbol in longOrShort:
+            type = "OpenLong"
+        elif side == "SELL" and not symbol in longOrShort:
+            type = "OpenShort"
+        elif side == "BUY":
+            type = "OpenLong" if longOrShort[symbol] == "LONG" else "CloseShort"
         else:
-            side = "OpenShort" if side == "SELL" else "CloseShort"
-        price = result["ap"]
-        pos = current_stream.get_positions()
+            type = "OpenShort" if longOrShort[symbol] == "SHORT" else "CloseLong"
+        price = result["p"]
+        pos = lastPositions
+        if not isinstance(pos,str):
+            pos = pos.to_string()
         for chat_id in current_users:
             updater.bot.sendMessage(chat_id=chat_id,text=f"The updated position:\n{pos}")
             updater.bot.sendMessage(chat_id=chat_id,text=f"The following trade is executed:\nSymbol: {symbol}\nType: {type}\nside: {side}\nExcPrice: {price}\nQuantity: {qty}")
@@ -163,9 +175,12 @@ Type "yes" (lowercase) if you agree. Otherwise type /cancel and exit.',
 
 def disclaimer_check(update: Update, context: CallbackContext):
     logger.info("%s has agreed to the disclaimer.", update.message.from_user.first_name)
-    update.message.reply_text("Please provide your API Key from Binance.")
-    update.message.reply_text("*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",parse_mode=telegram.ParseMode.MARKDOWN)
-    return APIKEY
+    # update.message.reply_text("Please provide your API Key from Binance.")
+    # update.message.reply_text("*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",parse_mode=telegram.ParseMode.MARKDOWN)
+    update.message.reply_text("You have succesfully subscribed! You will receive notifications soon.")
+    current_users[update.message.chat_id] = userClient(update.message.chat_id,context.user_data['uname'],0,0,0,0,0,0,0)
+    # return APIKEY
+    return ConversationHandler.END
 
 def check_api(update: Update, context: CallbackContext):
     context.user_data['api_key'] = update.message.text
@@ -253,6 +268,7 @@ def cancel(update: Update, context: CallbackContext) -> int:
     return ConversationHandler.END
 
 def end_everyone(update:Update, context: CallbackContext):
+    global current_users
     for user in current_users:
         updater.bot.sendMessage(chat_id=user,text="Your service has been force ended by admin.")
     current_users = {}
@@ -292,9 +308,10 @@ def save_to_file(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 def view_position(update:Update,context:CallbackContext):
-    global current_stream
-    txt = current_stream.get_positions()
-    updater.bot.sendMessage(chat_id=update.message.chat_id,text=txt)
+    if isinstance(lastPositions,str):
+        updater.bot.sendMessage(chat_id=update.message.chat_id,text=lastPositions)
+    else:
+        updater.bot.sendMessage(chat_id=update.message.chat_id,text=lastPositions.to_string())
     return
 
 def setAllLeverage(update: Update, context: CallbackContext):
@@ -1247,7 +1264,6 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )   
-
     global current_stream 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
@@ -1273,6 +1289,8 @@ def main():
     thr.start()
     thr2 = threading.Thread(target=get_newest_trade)
     thr2.start()
+    thr3 = threading.Thread(target=get_positions)
+    thr3.start()
     updater.start_polling()
     updater.idle()
 
