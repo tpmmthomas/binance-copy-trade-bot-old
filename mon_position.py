@@ -859,7 +859,7 @@ def url_add(update: Update, context: CallbackContext) -> int:
 
 def help_command(update: Update, context: CallbackContext) -> None:
     """Send a message when the command /help is issued."""
-    update.message.reply_text('***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/mute: Mute all notifications of trader (except sucessfully fulfilled trades)\n/unmute: Get notifications of trader\n/end: End the service.\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair.\n/setlmode: Change the leverage mode of a trader.\n/settmode: Change the trading mode for a (trader,symbol) pair.\n/setalltmode: Change trading mode for a trader, all symbols.\n/changesr: Change safety ratio\n/gettpsl: Get the take profit/stop loss ratio of a (trader,symbol) pair.\n/settpsl: Set the take profit/stop loss ratio of a (trader,symbol) pair.\n/setalltpsl: Set the take profit/stop loss ratio of a trader, all symbols.')
+    update.message.reply_text('***GENERAL***\n/start: Initalize and begin following traders\n/add: add a trader\n/delete: remove a trader\n/admin: Announce message to all users (need authorization code)\n/help: view list of commands\n/view : view a trader current position.\n/mute: Mute all notifications of trader (except sucessfully fulfilled trades)\n/unmute: Get notifications of trader\n/end: End the service.\n/changeapi: Change binance api key and secret key\n***TRADE COPY CONFIG***\n/setproportion: Set the trade copy proportion for a (trader,symbol) pair.\n/setallproportion: Set the trade copy proportion for a trader, all symbols.\n/getproportion: Get the current proportion for a (trader,symbol) pair\n/setleverage: set leverage for a (trader,symbol) pair.\n/setallleverage: set leverage for a trader, all symbols.\n/getleverage: Get the current leverage for the (trader,symbol) pair.\n/setlmode: Change the leverage mode of a trader.\n/settmode: Change the trading mode for a (trader,symbol) pair.\n/setalltmode: Change trading mode for a trader, all symbols.\n/changesr: Change safety ratio\n/gettpsl: Get the take profit/stop loss ratio of a (trader,symbol) pair.\n/settpsl: Set the take profit/stop loss ratio of a (trader,symbol) pair.\n/setalltpsl: Set the take profit/stop loss ratio of a trader, all symbols.')
 
 def split(a, n):
     if n==0:
@@ -1868,6 +1868,8 @@ class BinanceClient:
                         if positionKey in CurrentUsers[self.chat_id].threads[idx].positions:
                             CurrentUsers[self.chat_id].threads[idx].positions[positionKey] -= float(result['executedQty'])
                         else:
+                            CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = 0
+                        if CurrentUsers[self.chat_id].threads[idx].positions[positionKey] < 0:
                             CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = 0
                         UserLocks[self.chat_id].release()
                         #check positions thenn close all
