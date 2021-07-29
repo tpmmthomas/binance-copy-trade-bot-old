@@ -40,6 +40,14 @@ options = webdriver.ChromeOptions()
 options.binary_location = cfg.chrome_location
 options.add_argument("--headless")
 options.add_argument("--disable-web-security")
+options.add_argument('--ignore-certificate-errors')
+options.add_argument('--allow-running-insecure-content')
+options.add_argument("--disable-extensions")
+options.add_argument("--proxy-server='direct://'")
+options.add_argument("--proxy-bypass-list=*")
+options.add_argument("--start-maximized")
+options.add_argument('--disable-gpu')
+options.add_argument('--disable-dev-shm-usage')
 UserLocks = {}
 
 def round_up(n, decimals=0):
@@ -1932,6 +1940,7 @@ class BinanceClient:
 
     def open_trade(self,df,uname,proportion,leverage,lmode,tmodes,positions,takeProfit,stopLoss,mute):
         self.reload()
+        logger.info("DEBUG\n"+df.to_string())
         df = df.values    
         for tradeinfo in df:
             isOpen = False
