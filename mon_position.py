@@ -324,7 +324,7 @@ class FetchLatestPosition(threading.Thread):
         logger.info("%s starting %s",self.uname,self.name)
         while not self.isStop.is_set():
             isChanged = False
-            time.sleep(self.error*5)
+            time.sleep(self.error*6)
             while chrome_num >= 3:
                 time.sleep(1)
             master_lock.acquire()
@@ -1901,9 +1901,8 @@ class BinanceClient:
                             if pos["positionSide"] == result['positionSide'] and float(pos['positionAmt']) == 0 and positionKey in CurrentUsers[self.chat_id].tpslids:
                                 idlist = CurrentUsers[self.chat_id].tpslids[positionKey]
                                 try:
-                                    for i in range((len(idlist)-1)//10+1):
-                                        todoList = idlist[i*10:min((i+1)*10,len(idlist))]
-                                        self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
+                                    for id in idlist:
+                                        self.client.futures_cancel_order(symbol=symbol,orderId=id)
                                     CurrentUsers[self.chat_id].tpslids[positionKey] = []
                                 except BinanceAPIException as e:
                                     logger.error(str(e))
