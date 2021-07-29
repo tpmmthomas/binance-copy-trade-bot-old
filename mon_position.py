@@ -32,7 +32,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-AUTH, COCO,TRADERURL,MUTE1,MUTE2,ALLPROP2,REALSETPROP4,LEVTRADER6,LEVTRADER7,REALSETLEV7,LEVTRADER3,REALSETLEV4,LEVTRADER4,REALSETLEV5,LEVTRADER5,REALSETLEV6, TRADERURL2, LEVTRADER2,REALSETLEV3,TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TP,SL,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2,PROPTRADER3,PROPSYM3,REALSETPROP5,PROPTRADER2,PROPSYM2,REALSETPROP3,SAFERATIO= range(48)
+AUTH,SEP1,SEP2, COCO,TRADERURL,MUTE1,MUTE2,ALLPROP2,REALSETPROP4,LEVTRADER6,LEVTRADER7,REALSETLEV7,LEVTRADER3,REALSETLEV4,LEVTRADER4,REALSETLEV5,LEVTRADER5,REALSETLEV6, TRADERURL2, LEVTRADER2,REALSETLEV3,TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TP,SL,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2,PROPTRADER3,PROPSYM3,REALSETPROP5,PROPTRADER2,PROPSYM2,REALSETPROP3,SAFERATIO= range(50)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 mutex = threading.Lock()
@@ -258,7 +258,7 @@ class FetchLatestPosition(threading.Thread):
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
-                        df2 = df2.drop(idx)
+                        df2 = df2.drop(r)
                         hasChanged = True
                         break
                     if not isPositive and newsize < 0:
@@ -1721,6 +1721,29 @@ def unmute_choosetrader(update: Update, context: CallbackContext):
     update.message.reply_text("Success!")
     return ConversationHandler.END
 
+def change_api(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    update.message.reply_text("Please provide your API Key from Binance.")
+    update.message.reply_text("*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",parse_mode=telegram.ParseMode.MARKDOWN)
+    return SEP1
+
+def change_secret(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    logger.info(f"User {user.uname} changing api keys.")
+    update.message.reply_text("Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",parse_mode=telegram.ParseMode.MARKDOWN) 
+    context.user_data['api_key'] = update.message.text
+    update.message.reply_text("Success!")
+    return SEP2
+
+def change_bnall(update: Update, context: CallbackContext):
+    user = CurrentUsers[update.message.chat_id]
+    user.api_key = context.user_data['api_key']
+    user.api_secret = update.message.text
+    user.bclient.change_keys(user.api_key,user.api_secret)
+    return ConversationHandler.END
+
 class BinanceClient:
     def __init__(self,chat_id,uname,safety_ratio,api_key,api_secret):
         self.client = Client(api_key,api_secret)
@@ -1850,10 +1873,11 @@ class BinanceClient:
                         #check positions thenn close all
                         res = self.client.futures_position_information(symbol=symbol)
                         for pos in res:
+                            logger.info(str(pos))
                             if pos["positionSide"] == result['positionSide'] and float(pos['positionAmt']) == 0 and positionKey in CurrentUsers[self.chat_id].tpslids:
                                 idlist = CurrentUsers[self.chat_id].tpslids[positionKey]
                                 for i in range((len(idlist)-1)//10+1):
-                                    todoList = idlist[i*10:min((i+1)*10-1,len(idlist)-1)]
+                                    todoList = idlist[i*10:min((i+1)*10,len(idlist))]
                                     self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
                                 CurrentUsers[self.chat_id].tpslids[positionKey] = []
                     return
@@ -1879,7 +1903,8 @@ class BinanceClient:
                             CurrentUsers[self.chat_id].threads[idx].positions[positionKey] = 0
                         UserLocks[self.chat_id].release()
                     executed_qty = float(result['executedQty'])
-            except:
+            except BinanceAPIException as e:
+                logger.error(e)
                 pass
             if numTries >= 59:
                 break
@@ -2028,6 +2053,9 @@ class BinanceClient:
         self.safety_ratio = safety_ratio
         updater.bot.sendMessage(chat_id=self.chat_id,text="Succesfully changed safety ratio.")
         return
+
+    def change_keys(self,apikey,apisecret):
+        self.client = Client(apikey,apisecret)
 
 class users:
     def __init__(self,chat_id,uname,safety_ratio,init_trader=None,trader_name=None,api_key=None,api_secret=None,toTrade=None,tp=None,sl=None,tmode=None,lmode=None):
@@ -2286,6 +2314,14 @@ def main() -> None:
         entry_points=[CommandHandler('unmute',unmute_trader)],
         states={
             MUTE2:[MessageHandler(Filters.text & ~Filters.command,unmute_choosetrader)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )  
+    conv_handler22 = ConversationHandler(
+        entry_points=[CommandHandler('changeapi',change_api)],
+        states={
+            SEP1:[MessageHandler(Filters.text & ~Filters.command,change_secret)],
+            SEP2:[MessageHandler(Filters.text & ~Filters.command,change_bnall)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )  

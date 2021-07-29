@@ -823,7 +823,7 @@ class userClient:
                             if pos["positionSide"] == result['positionSide'] and float(pos['positionAmt']) == 0 and positionKey in self.tpslids:
                                 idlist = self.tpslids[positionKey]
                                 for i in range((len(idlist)-1)//10+1):
-                                    todoList = idlist[i*10:min((i+1)*10-1,len(idlist)-1)]
+                                    todoList = idlist[i*10:min((i+1)*10,len(idlist))]
                                     self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
                                 self.tpslids[positionKey] = []
                     return
@@ -1239,6 +1239,13 @@ def main():
         fallbacks=[CommandHandler('cancel', cancel)],
     )
     conv_handler19 = ConversationHandler(
+        entry_points=[CommandHandler('gettpsl',get_tpsl)],
+        states={
+            REALSETLEV7:[MessageHandler(Filters.text & ~Filters.command,getTpslReal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )   
+    conv_handler20 = ConversationHandler(
         entry_points=[CommandHandler('gettpsl',get_tpsl)],
         states={
             REALSETLEV7:[MessageHandler(Filters.text & ~Filters.command,getTpslReal)],
