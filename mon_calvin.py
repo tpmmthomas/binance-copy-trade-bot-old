@@ -1245,13 +1245,7 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )   
-    conv_handler20 = ConversationHandler(
-        entry_points=[CommandHandler('gettpsl',get_tpsl)],
-        states={
-            REALSETLEV7:[MessageHandler(Filters.text & ~Filters.command,getTpslReal)],
-        },
-        fallbacks=[CommandHandler('cancel', cancel)],
-    )   
+
     global current_stream 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)

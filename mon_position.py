@@ -1876,10 +1876,13 @@ class BinanceClient:
                             logger.info(str(pos))
                             if pos["positionSide"] == result['positionSide'] and float(pos['positionAmt']) == 0 and positionKey in CurrentUsers[self.chat_id].tpslids:
                                 idlist = CurrentUsers[self.chat_id].tpslids[positionKey]
-                                for i in range((len(idlist)-1)//10+1):
-                                    todoList = idlist[i*10:min((i+1)*10,len(idlist))]
-                                    self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
-                                CurrentUsers[self.chat_id].tpslids[positionKey] = []
+                                try:
+                                    for i in range((len(idlist)-1)//10+1):
+                                        todoList = idlist[i*10:min((i+1)*10,len(idlist))]
+                                        self.client.futures_cancel_orders(symbol=symbol,orderIdList=todoList)
+                                    CurrentUsers[self.chat_id].tpslids[positionKey] = []
+                                except BinanceAPIException as e:
+                                    logger.error(str(e))
                     return
                 elif result['status'] in ["CANCELED","PENDING_CANCEL","REJECTED","EXPIRED"]:
                     updater.bot.sendMessage(chat_id=self.chat_id,text=f"Order ID {orderId} ({positionKey}) is cancelled/rejected.")
