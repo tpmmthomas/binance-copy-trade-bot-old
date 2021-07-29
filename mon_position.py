@@ -2346,6 +2346,7 @@ def main() -> None:
     dispatcher.add_handler(conv_handler19)
     dispatcher.add_handler(conv_handler20)
     dispatcher.add_handler(conv_handler21)
+    dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(CommandHandler("help", help_command))
     #TODO: add /end command
     # Start the Bot
