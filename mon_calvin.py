@@ -36,7 +36,7 @@ updater = Updater(cnt.bot_token2)
 
 current_users = {}
 current_stream = None
-lastPositions = ""
+lastPositions = "Welcome!"
 longOrShort = {}
 
 def round_up(n, decimals=0):
@@ -1024,7 +1024,6 @@ class userClient:
         logger.info(f"{self.uname} Successfully changed lmode.")
         #updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed leverage mode!")
         return
-
 
 def restore_save_data():
     logger.info("Restored data")
