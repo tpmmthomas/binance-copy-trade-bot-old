@@ -29,7 +29,7 @@ q = queue.Queue(200)
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
 )
-AUTH,CHECKPROP, COCO,TRADERURL,MUTE1,MUTE2,ALLPROP2,REALSETPROP4,LEVTRADER6,LEVTRADER7,REALSETLEV7,LEVTRADER3,REALSETLEV4,LEVTRADER4,REALSETLEV5,LEVTRADER5,REALSETLEV6, TRADERURL2, LEVTRADER2,REALSETLEV3,TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TP,SL,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2,PROPTRADER3,PROPSYM3,REALSETPROP5,PROPTRADER2,PROPSYM2,REALSETPROP3,SAFERATIO= range(49)
+AUTH,SEP1,SEP2,CHECKPROP, COCO,TRADERURL,MUTE1,MUTE2,ALLPROP2,REALSETPROP4,LEVTRADER6,LEVTRADER7,REALSETLEV7,LEVTRADER3,REALSETLEV4,LEVTRADER4,REALSETLEV5,LEVTRADER5,REALSETLEV6, TRADERURL2, LEVTRADER2,REALSETLEV3,TRADERNAME, AUTH2, ANNOUNCE,DISCLAIMER,VIEWTRADER,TP,SL,TOTRADE,TMODE,LMODE,APIKEY,APISECRET,ALLLEV,REALSETLEV,LEVTRADER,LEVSYM,REALSETLEV2,ALLPROP,REALSETPROP,PROPTRADER,PROPSYM,REALSETPROP2,PROPTRADER3,PROPSYM3,REALSETPROP5,PROPTRADER2,PROPSYM2,REALSETPROP3,SAFERATIO= range(51)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
@@ -580,6 +580,30 @@ def getTpslReal(update: Update, context: CallbackContext):
     tp,sl = user.get_tpsl(symbol)
     update.message.reply_text(f"The take profit/stop loss percentage set for {user.name}, {symbol} is {tp}% and {sl}% respectively. (-1 means not set)")
     return ConversationHandler.END
+
+def change_api(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    update.message.reply_text("Please provide your API Key from Binance.")
+    update.message.reply_text("*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",parse_mode=telegram.ParseMode.MARKDOWN)
+    return SEP1
+
+def change_secret(update: Update, context: CallbackContext):
+    user = current_users[update.message.chat_id]
+    logger.info(f"User {user.uname} changing api keys.")
+    update.message.reply_text("Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",parse_mode=telegram.ParseMode.MARKDOWN) 
+    context.user_data['api_key'] = update.message.text
+    return SEP2
+
+def change_bnall(update: Update, context: CallbackContext):
+    user = current_users[update.message.chat_id]
+    user.api_key = context.user_data['api_key']
+    user.api_secret = update.message.text
+    user.client = Client(user.api_key,user.api_secret)
+    update.message.reply_text("Success!")
+    return ConversationHandler.END
+
 
 class userClient:
     def __init__(self,chat_id,uname,safety_ratio,api_key,api_secret,proportion,positions=None,Leverage=None,tp=-1,sl=-1,lmode=0):
@@ -1159,6 +1183,14 @@ def main():
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )   
+    conv_handler22 = ConversationHandler(
+        entry_points=[CommandHandler('changeapi',change_api)],
+        states={
+            SEP1:[MessageHandler(Filters.text & ~Filters.command,change_secret)],
+            SEP2:[MessageHandler(Filters.text & ~Filters.command,change_bnall)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )  
     global current_stream 
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
@@ -1176,6 +1208,7 @@ def main():
     dispatcher.add_handler(conv_handler17)
     dispatcher.add_handler(conv_handler18)
     dispatcher.add_handler(conv_handler19)
+    dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     current_stream = getStreamData()
