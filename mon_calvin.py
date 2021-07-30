@@ -194,11 +194,17 @@ def disclaimer_check(update: Update, context: CallbackContext):
 
 def check_api(update: Update, context: CallbackContext):
     context.user_data['api_key'] = update.message.text
+    if not update.message.text.isalnum():
+        update.message.reply_text("Your API key is invalid, please enter again.")
+        return APIKEY
     update.message.reply_text("Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",parse_mode=telegram.ParseMode.MARKDOWN) 
     return APISECRET
 
 def check_secret(update: Update, context: CallbackContext):
     context.user_data['api_secret'] = update.message.text
+    if not update.message.text.isalnum():
+        update.message.reply_text("Your secret key is invalid, please enter again.")
+        return APISECRET
     update.message.reply_text("Please enter the amount (in USDT) you plan to invest with this bot. We will calculate the suggested proportion for you.")
     return CHECKPROP
 
