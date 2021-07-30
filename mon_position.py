@@ -325,6 +325,7 @@ class FetchLatestPosition(threading.Thread):
         while not self.isStop.is_set():
             isChanged = False
             time.sleep(self.error*5.5)
+            logger.info(f"DEBUG: {chrome_num}")
             while chrome_num >= 3:
                 time.sleep(1)
             master_lock.acquire()
@@ -337,14 +338,16 @@ class FetchLatestPosition(threading.Thread):
                     updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 self.error = 0
             if self.driver is None:
-                while True:
-                    try:
-                        self.driver = webdriver.Chrome(cfg.driver_location,options=options)
-                        self.driver.get(self.fetch_url)
-                        break
-                    except: 
-                        time.sleep(0.1)
-                        continue
+                try:
+                    self.driver = webdriver.Chrome(cfg.driver_location,options=options)
+                    self.driver.get(self.fetch_url)
+                except: 
+                    self.error += 1
+                    master_lock.acquire()
+                    chrome_num -= 1
+                    master_lock.release()
+                    time.sleep(50)
+                    continue
             else:
                 try:
                     self.driver.refresh()
@@ -353,7 +356,7 @@ class FetchLatestPosition(threading.Thread):
                     master_lock.acquire()
                     chrome_num -= 1
                     master_lock.release()
-                    time.sleep(45)
+                    time.sleep(50)
                     continue
             master_lock.acquire()
             chrome_num -= 1
@@ -369,6 +372,8 @@ class FetchLatestPosition(threading.Thread):
             x = x[idx:idx2]
             if idx3 != -1:
                 self.num_no_data += 1
+                if self.num_no_data > 50:
+                    self.num_no_data = 2
                 if self.num_no_data >=2 and not isinstance(self.prev_df,str):
                     now = datetime.now()
                     if not self.mute:
@@ -383,10 +388,10 @@ class FetchLatestPosition(threading.Thread):
                 if self.num_no_data != 1:
                     self.prev_df = "x"
                     self.first_run = False
-                    time.sleep(45)
+                    time.sleep(50)
                 time.sleep(5)
                 self.runtimes += 1
-                if self.runtimes >=15:
+                if self.runtimes >=10:
                     self.runtimes = 0
                     self.driver.quit()
                     self.driver = None
@@ -433,12 +438,12 @@ class FetchLatestPosition(threading.Thread):
             self.prev_df = output["data"]
             self.first_run = False
             self.runtimes += 1
-            if self.runtimes >=15:
+            if self.runtimes >=10:
                 self.runtimes = 0
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            time.sleep(45)
+            time.sleep(50)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(chat_id=self.chat_id,text=f"Successfully quit following trader {self.name}.")
@@ -621,17 +626,30 @@ class FetchLatestPosition(threading.Thread):
 def retrieveUserName(url):
     success = False
     name = ""
-    while True:
-        try:
-            myDriver = webdriver.Chrome(cfg.driver_location,options=options)
-            break
-        except: 
-            time.sleep(0.1)
-            continue
+    global chrome_num
+    while chrome_num >= 3:
+        time.sleep(1)
+    master_lock.acquire()
+    chrome_num += 1
+    master_lock.release()
+    try:
+        myDriver = webdriver.Chrome(cfg.driver_location,options=options)
+    except: 
+        return None
+    i = 0
     while not success or name == "No Battle Record Found":
+        if i >=10:
+            master_lock.acquire()
+            chrome_num -= 1
+            master_lock.release()
+            return None
+        i += 1
         try:
             myDriver.get(url)
         except:
+            master_lock.acquire()
+            chrome_num -= 1
+            master_lock.release()
             return None
         time.sleep(2)
         soup = BeautifulSoup(myDriver.page_source,features="html.parser")
@@ -644,6 +662,9 @@ def retrieveUserName(url):
             success = True
         except:
             continue
+    master_lock.acquire()
+    chrome_num -= 1
+    master_lock.release()
     myDriver.quit()
     return name
 
