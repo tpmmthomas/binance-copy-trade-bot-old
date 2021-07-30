@@ -344,6 +344,7 @@ class FetchLatestPosition(threading.Thread):
                     self.error += 1
                     master_lock.acquire()
                     chrome_num -= 1
+                    
                     master_lock.release()
                     time.sleep(50)
                     continue
