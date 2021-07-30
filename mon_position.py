@@ -344,7 +344,7 @@ class FetchLatestPosition(threading.Thread):
                     self.error += 1
                     master_lock.acquire()
                     chrome_num -= 1
-                    
+
                     master_lock.release()
                     time.sleep(50)
                     continue
@@ -703,11 +703,17 @@ def disclaimer_check(update: Update, context: CallbackContext):
 
 def check_api(update: Update, context: CallbackContext):
     context.user_data['api_key'] = update.message.text
+    if not update.message.text.isalnum():
+        update.message.reply_text("Your API key is invalid, please enter again.")
+        return APIKEY
     update.message.reply_text("Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",parse_mode=telegram.ParseMode.MARKDOWN) 
     return APISECRET
 
 def check_secret(update: Update, context: CallbackContext):
     context.user_data['api_secret'] = update.message.text
+    if not update.message.text.isalnum():
+        update.message.reply_text("Your secret key is invalid, please enter again.")
+        return APISECRET
     update.message.reply_text("To protect your funds, you are required to enter a safe ratio as a threshold in which trades will be opened.\nIf your account's available balance * safe ratio <= the margin required, the trade will not be set up.\n(Enter a number between 0 and 1.)")
     return SAFERATIO
 
