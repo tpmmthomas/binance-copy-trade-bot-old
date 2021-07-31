@@ -928,7 +928,7 @@ class userClient:
                 rvalue = self.client.futures_create_order(symbol=tradeinfo['s'],side=tradeinfo['S'],positionSide=ps,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
                 logger.info(f"{self.uname} opened order.")
                 self.unfulfilledPos[cid] = rvalue['orderId']
-                positionKey = tradeinfo[1] + ps
+                positionKey = tradeinfo['s'] + ps
                 t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[['s']],positionKey,isOpen,self.uname,self.take_profit_percent[tradeinfo['s']],self.stop_loss_percent[tradeinfo['s']],self.leverage[tradeinfo['s']],tosend,cid))
                 t1.start()
             except BinanceAPIException as e:
