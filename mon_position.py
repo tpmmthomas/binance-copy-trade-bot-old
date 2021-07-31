@@ -2041,6 +2041,10 @@ class BinanceClient:
             balance = float(balance)
             latest_price = float(self.client.futures_mark_price(symbol=tradeinfo[1])['markPrice'])
             collateral = (latest_price * quant) / leverage[tradeinfo[1]]
+            reqticksize = self.ticksize[tradeinfo[1]]
+            reqstepsize = self.stepsize[tradeinfo[1]]
+            quant = round_up(quant,reqstepsize)
+            quant = str(quant)
             if isOpen:
                 if not mute:
                     updater.bot.sendMessage(chat_id=self.chat_id,text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.")
@@ -2048,10 +2052,6 @@ class BinanceClient:
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
                     continue
-            reqticksize = self.ticksize[tradeinfo[1]]
-            reqstepsize = self.stepsize[tradeinfo[1]]
-            quant = round_up(quant,reqstepsize)
-            quant = str(quant)
             if isinstance(tradeinfo[3],str):
                 tradeinfo[3] = tradeinfo[3].replace(",","")
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]),reqticksize)
