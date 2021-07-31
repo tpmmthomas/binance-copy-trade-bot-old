@@ -43,6 +43,12 @@ def round_up(n, decimals=0):
     multiplier = 10 ** decimals
     return math.ceil(n * multiplier) / multiplier
 
+def show_positions():
+    time.sleep(3)
+    for chat_id in current_users:
+        pos = lastPositions
+        updater.bot.sendMessage(chat_id=chat_id,text="The latest position:\n"+pos)
+
 class getStreamData(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -72,10 +78,8 @@ class getStreamData(threading.Thread):
                             time.sleep(1)
                         q.put((buffer,1))
                     elif buffer["o"]["X"] == "FILLED":
-                        time.sleep(5)
-                        for chat_id in current_users:
-                            pos = lastPositions
-                            updater.bot.sendMessage(chat_id=chat_id,text="The latest position:\n"+pos)
+                        t1 = threading.Thread(target=show_positions)
+                        t1.start()
                 logger.info(str(buffer))
 
     def stop(self):
@@ -84,7 +88,7 @@ class getStreamData(threading.Thread):
 def get_positions():
     global lastPositions
     while True:
-        time.sleep(5)
+        time.sleep(2)
         result = current_stream.client.futures_position_information()
         symbol = []
         size = []
@@ -92,6 +96,7 @@ def get_positions():
         MarkPrice = []
         PNL = []
         margin = []
+        listTradingSymbols = []
         for pos in result:
             if float(pos['positionAmt']) != 0:
                 symbol.append(pos['symbol'])
@@ -106,9 +111,13 @@ def get_positions():
                 PNL.append(pos['unRealizedProfit'])
                 margin.append(pos['leverage'])
                 longOrShort[pos['symbol']] = pside
+                listTradingSymbols.append(pos['symbol'])
                 for user in current_users:
                     if current_users[user].lmode == 0:
                         current_users[user].leverage[pos['symbol']] = int(pos['leverage'])
+        for symbols in longOrShort:
+            if not symbols in listTradingSymbols:
+                del longOrShort[symbols]
         if len(symbol) > 0:
             lastPositions =  pd.DataFrame({'symbol':symbol,'size':size,"Entry Price":EnPrice,"Mark Price":MarkPrice,"PNL":PNL,"leverage":margin}).to_string()
         else:
@@ -128,21 +137,21 @@ def get_newest_trade():
             symbol = result["s"]
             side = result["S"]
             qty = result["q"]
-            type = result["o"]
+            ptype = result["o"]
             if side == "BUY" and not symbol in longOrShort:
-                type = "OpenLong"
+                ptype = "OpenLong"
             elif side == "SELL" and not symbol in longOrShort:
-                type = "OpenShort"
+                ptype = "OpenShort"
             elif side == "BUY":
-                type = "OpenLong" if longOrShort[symbol] == "LONG" else "CloseShort"
+                ptype = "OpenLong" if longOrShort[symbol] == "LONG" else "CloseShort"
             else:
-                type = "OpenShort" if longOrShort[symbol] == "SHORT" else "CloseLong"
+                ptype = "OpenShort" if longOrShort[symbol] == "SHORT" else "CloseLong"
             price = result["p"]
             ttype = result["o"]
             for chat_id in current_users:
-                updater.bot.sendMessage(chat_id=chat_id,text=f"The following trade is opened in Kevin's account:\nSymbol: {symbol}\nType: {type}\nExcPrice: {price}\nQuantity: {qty}\nOrder Type: {ttype}")
+                updater.bot.sendMessage(chat_id=chat_id,text=f"The following trade is opened in Kevin's account:\nSymbol: {symbol}\nType: {ptype}\nExcPrice: {price}\nQuantity: {qty}\nOrder Type: {ttype}")
                 if ttype in ["MARKET","LIMIT"]:
-                    current_users[chat_id].open_trade(result,type,cid)
+                    current_users[chat_id].open_trade(result,ptype,cid)
         else:
             result = result[0]["o"]
             cid = result['c']
@@ -610,7 +619,6 @@ def change_bnall(update: Update, context: CallbackContext):
     update.message.reply_text("Success!")
     return ConversationHandler.END
 
-
 class userClient:
     def __init__(self,chat_id,uname,safety_ratio,api_key,api_secret,proportion,positions=None,Leverage=None,tp=-1,sl=-1,lmode=0):
         self.chat_id = chat_id
@@ -753,6 +761,8 @@ class userClient:
         time.sleep(1)
         result = ""
         executed_qty = 0
+        if tosend is not None:
+            tosend = tosend + "DEBUG_2"
         while True: 
             try:
                 result = self.client.futures_get_order(symbol=symbol,orderId=orderId)
@@ -830,6 +840,8 @@ class userClient:
             del self.unfulfilledPos[cid]
 
     def open_trade(self,tradeinfo,type,cid):
+        logger.info("Attempting to open trade.")
+        logger.info(str(tradeinfo))
         self.reload()   
         isOpen = False
         type = type.upper()
@@ -886,8 +898,8 @@ class userClient:
         target_price = "{:0.0{}f}".format(float(tradeinfo["p"]),reqticksize)
         if tradeinfo["o"] == "MARKET":
             try:
-                tosend = f"Executed the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: MARKET\nquantity: {quant}"
-                #updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                tosend = f"Executing the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: MARKET\nquantity: {quant}"
+                updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 rvalue = self.client.futures_create_order(symbol=tradeinfo['s'],side=tradeinfo['S'],positionSide=ps,type="MARKET",quantity=quant)
                 logger.info(f"{self.uname} opened order.")
                 self.unfulfilledPos[cid] = rvalue['orderId']
@@ -911,8 +923,8 @@ class userClient:
                 pass
             target_price = "{:0.0{}f}".format(float(target_price),reqticksize)
             try:
-                tosend = f"Executed the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
-                #updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                tosend = f"Executing the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
+                updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
                 rvalue = self.client.futures_create_order(symbol=tradeinfo['s'],side=tradeinfo['S'],positionSide=ps,type="LIMIT",quantity=quant,price=target_price,timeInForce="GTC")
                 logger.info(f"{self.uname} opened order.")
                 self.unfulfilledPos[cid] = rvalue['orderId']
@@ -924,6 +936,7 @@ class userClient:
                 updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
 
     def cancel_trade(self,cid,symbol):
+        logger.info("Trying to cancel trade")
         if cid in self.unfulfilledPos:
             logger.info(f"{self.uname} canceled order.")
             updater.bot.send_message(chat_id=self.chat_id,text="Canceled order.")
