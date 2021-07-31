@@ -929,7 +929,7 @@ class userClient:
                 logger.info(f"{self.uname} opened order.")
                 self.unfulfilledPos[cid] = rvalue['orderId']
                 positionKey = tradeinfo['s'] + ps
-                t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo[['s']],positionKey,isOpen,self.uname,self.take_profit_percent[tradeinfo['s']],self.stop_loss_percent[tradeinfo['s']],self.leverage[tradeinfo['s']],tosend,cid))
+                t1 = threading.Thread(target=self.query_trade,args=(rvalue['orderId'],tradeinfo['s'],positionKey,isOpen,self.uname,self.take_profit_percent[tradeinfo['s']],self.stop_loss_percent[tradeinfo['s']],self.leverage[tradeinfo['s']],tosend,cid))
                 t1.start()
             except BinanceAPIException as e:
                 logger.error(e)
