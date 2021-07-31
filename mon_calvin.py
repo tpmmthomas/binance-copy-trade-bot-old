@@ -891,8 +891,8 @@ class userClient:
             if collateral >= balance*self.safety_ratio:
                 updater.bot.sendMessage(chat_id=self.chat_id,text=f"WARNING: this trade will take up more than {self.safety_ratio*100}% of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.")
                 return
-        reqticksize = self.ticksize[tradeinfo[1]]
-        reqstepsize = self.stepsize[tradeinfo[1]]
+        reqticksize = self.ticksize[tradeinfo["s"]]
+        reqstepsize = self.stepsize[tradeinfo["s"]]
         quant = round_up(quant,reqstepsize)
         quant = str(quant)
         target_price = "{:0.0{}f}".format(float(tradeinfo["p"]),reqticksize)
