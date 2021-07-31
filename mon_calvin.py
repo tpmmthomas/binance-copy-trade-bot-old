@@ -909,7 +909,7 @@ class userClient:
             except BinanceAPIException as e:
                 logger.error(e)
                 if not isOpen and str(e).find("2022") >= 0:
-                    positionKey = tradeinfo[1] + ps
+                    positionKey = tradeinfo['s'] + ps
                     self.positions[positionKey] = 0
                 updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
         elif tradeinfo['o'] == "LIMIT":
