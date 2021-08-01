@@ -244,7 +244,9 @@ def get_newest_trade():
             symbol = result["s"]
             for chat_id in current_users:
                 current_users[chat_id].cancel_trade(cid, symbol)
-                updater.bot.sendMessage("The trade was cancelled in Kevin's account.")
+                updater.bot.sendMessage(
+                    chat_id=chat_id, text="The trade was cancelled in Kevin's account."
+                )
 
 
 def automatic_reload():
