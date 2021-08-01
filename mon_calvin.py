@@ -244,6 +244,7 @@ def get_newest_trade():
             symbol = result["s"]
             for chat_id in current_users:
                 current_users[chat_id].cancel_trade(cid, symbol)
+                updater.bot.sendMessage("The trade was cancelled in Kevin's account.")
 
 
 def automatic_reload():
@@ -254,6 +255,7 @@ def automatic_reload():
         newStream = getStreamData()
         newStream.start()
         current_stream = newStream
+        save_to_file(None, None)
 
 
 def start(update: Update, context: CallbackContext) -> int:
@@ -1117,14 +1119,10 @@ class userClient:
         time.sleep(1)
         result = ""
         executed_qty = 0
-        if tosend is not None:
-            tosend = tosend + "DEBUG_2"
         while True:
             try:
                 result = self.client.futures_get_order(symbol=symbol, orderId=orderId)
                 if result["status"] == "FILLED":
-                    if isinstance(tosend, str):
-                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
                     updater.bot.sendMessage(
                         chat_id=self.chat_id,
                         text=f"Order ID {orderId} ({positionKey}) fulfilled successfully.",
@@ -1240,6 +1238,7 @@ class userClient:
         logger.info("Attempting to open trade.")
         logger.info(str(tradeinfo))
         self.reload()
+        mids = []
         isOpen = False
         type = type.upper()
         ps = ""
@@ -1267,10 +1266,11 @@ class userClient:
                 return
             elif self.positions[checkKey] < quant:
                 quant = min(self.positions[checkKey], quant)
-                updater.bot.sendMessage(
+                result = updater.bot.sendMessage(
                     chat_id=self.chat_id,
                     text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                 )
+                mids.append(result.message_id)
         elif not isOpen and quant / self.positions[checkKey] > 0.9:
             quant = max(self.positions[checkKey], quant)
         if quant == 0:
@@ -1288,10 +1288,11 @@ class userClient:
                     break
             if tradeinfo["s"][-4:] == "BUSD":
                 tradeinfo["s"] = tradeinfo["s"][:-4] + "USDT"
-                updater.bot.sendMessage(
+                result = updater.bot.sendMessage(
                     chat_id=self.chat_id,
                     text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.",
                 )
+                mids.append(result.message_id)
         except BinanceAPIException as e:
             coin = "USDT"
             balance = "0"
@@ -1302,10 +1303,11 @@ class userClient:
         )
         collateral = (latest_price * quant) / self.leverage[tradeinfo["s"]]
         if isOpen:
-            updater.bot.sendMessage(
+            result = updater.bot.sendMessage(
                 chat_id=self.chat_id,
                 text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.",
             )
+            mids.append(result.message_id)
             if collateral >= balance * self.safety_ratio:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
@@ -1320,7 +1322,8 @@ class userClient:
         if tradeinfo["o"] == "MARKET":
             try:
                 tosend = f"Executing the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: MARKET\nquantity: {quant}"
-                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                result = updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                mids.append(result.message_id)
                 rvalue = self.client.futures_create_order(
                     symbol=tradeinfo["s"],
                     side=tradeinfo["S"],
@@ -1329,7 +1332,7 @@ class userClient:
                     quantity=quant,
                 )
                 logger.info(f"{self.uname} opened order.")
-                self.unfulfilledPos[cid] = rvalue["orderId"]
+                self.unfulfilledPos[cid] = (rvalue["orderId"], mids)
                 positionKey = tradeinfo["s"] + ps
                 t1 = threading.Thread(
                     target=self.query_trade,
@@ -1365,7 +1368,8 @@ class userClient:
             target_price = "{:0.0{}f}".format(float(target_price), reqticksize)
             try:
                 tosend = f"Executing the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
-                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                result = updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                mids.append(result.message_id)
                 rvalue = self.client.futures_create_order(
                     symbol=tradeinfo["s"],
                     side=tradeinfo["S"],
@@ -1376,7 +1380,7 @@ class userClient:
                     timeInForce="GTC",
                 )
                 logger.info(f"{self.uname} opened order.")
-                self.unfulfilledPos[cid] = rvalue["orderId"]
+                self.unfulfilledPos[cid] = (rvalue["orderId"], mids)
                 positionKey = tradeinfo["s"] + ps
                 t1 = threading.Thread(
                     target=self.query_trade,
@@ -1402,10 +1406,15 @@ class userClient:
         logger.info("Trying to cancel trade")
         if cid in self.unfulfilledPos:
             logger.info(f"{self.uname} canceled order.")
-            updater.bot.send_message(chat_id=self.chat_id, text="Canceled order.")
-            self.client.futures_cancel_order(
-                symbol=symbol, orderId=self.unfulfilledPos[cid]
-            )
+            for mid in self.unfulfilledPos[cid][1]:
+                updater.bot.delete_message(chat_id=self.chat_id, message_id=mid)
+            try:
+                self.client.futures_cancel_order(
+                    symbol=symbol, orderId=self.unfulfilledPos[cid][0]
+                )
+            except BinanceAPIException as e:
+                logger.error(str(e))
+                updater.bot.send_message(chat_id=self.chat_id, text=str(e))
             del self.unfulfilledPos[cid]
 
     def reload(self):
