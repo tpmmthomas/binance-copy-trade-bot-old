@@ -259,6 +259,7 @@ def automatic_reload():
     while True:
         time.sleep(23 * 60 * 60)
         current_stream.stop()
+        time.sleep(1)
         newStream = getStreamData()
         newStream.start()
         current_stream = newStream
