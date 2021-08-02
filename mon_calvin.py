@@ -151,7 +151,12 @@ def get_positions():
     global lastPositions
     while True:
         time.sleep(4)
-        result = current_stream.client.futures_position_information()
+        try:
+            result = current_stream.client.futures_position_information()
+        except:
+            logger.error("Cannot retrieve latest position.")
+            time.sleep(2)
+            continue
         symbol = []
         size = []
         EnPrice = []
@@ -1155,7 +1160,11 @@ class userClient:
                             self.positions[positionKey] -= float(result["executedQty"])
                         else:
                             self.positions[positionKey] = 0
-                        res = self.client.futures_position_information(symbol=symbol)
+                        try:
+                            res = self.client.futures_position_information(symbol=symbol)
+                        except BinanceAPIException as e:
+                            logger.error(str(e))
+                            return
                         for pos in res:
                             if (
                                 pos["positionSide"] == result["positionSide"]
