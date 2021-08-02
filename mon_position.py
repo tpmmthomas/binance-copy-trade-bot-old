@@ -210,6 +210,7 @@ class FetchLatestPosition(threading.Thread):
         self.needlev = False
         self.needtmode = False
         self.mute = False
+        self.lastPosTime = datetime.now() + datetime.timedelta(hours=8)
         if self.positions is None:
             self.positions = {}
         if isinstance(tmode, int):
@@ -499,10 +500,11 @@ class FetchLatestPosition(threading.Thread):
             x = x[idx:idx2]
             if idx3 != -1:
                 self.num_no_data += 1
-                if self.num_no_data > 50:
-                    self.num_no_data = 2
-                if self.num_no_data >= 2 and not isinstance(self.prev_df, str):
-                    now = datetime.now()
+                if self.num_no_data > 30:
+                    self.num_no_data = 4
+                if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
+                    now = datetime.now() + datetime.timedelta(hours=8)
+                    self.lastPosTime = datetime.now() + datetime.timedelta(hours=8)
                     if not self.mute:
                         tosend = (
                             f"Trader {self.name}, Current time: "
@@ -527,11 +529,10 @@ class FetchLatestPosition(threading.Thread):
                                 self.mute,
                             )
                             UserLocks[self.chat_id].release()
-                if self.num_no_data != 1:
+                if self.num_no_data >= 3:
                     self.prev_df = "x"
                     self.first_run = False
-                    time.sleep(50)
-                time.sleep(5)
+                time.sleep(5 * self.num_no_data)
                 self.runtimes += 1
                 if self.runtimes >= 10:
                     self.runtimes = 0
@@ -567,7 +568,8 @@ class FetchLatestPosition(threading.Thread):
                 if not toComp.equals(prevdf):
                     isChanged = True
             if isChanged:
-                now = datetime.now()
+                now = datetime.now() + datetime.timedelta(hours=8)
+                self.lastPosTime = datetime.now() + datetime.timedelta(hours=8)
                 if not self.mute:
                     tosend = (
                         f"Trader {self.name}, Current time: "
@@ -1384,7 +1386,9 @@ def view_traderInfo(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
-    update.message.reply_text(f"{update.message.text}'s current position:")
+    update.message.reply_text(
+        f"{update.message.text}'s current position: \n(Last position update: {str(user.threads[idx].lastPosTime)})"
+    )
     update.message.reply_text(f"{user.threads[idx].get_info()}")
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
@@ -2943,7 +2947,7 @@ class BinanceClient:
                         text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
                     )
                 continue
-            
+
             latest_price = float(
                 self.client.futures_mark_price(symbol=tradeinfo[1])["markPrice"]
             )
