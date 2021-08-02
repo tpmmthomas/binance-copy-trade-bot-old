@@ -1094,6 +1094,8 @@ def trade_confirm(update: Update, context: CallbackContext):
                     context.user_data["toTrade"],
                     -1,
                     -1,
+                    -1,
+                    -1,
                 ),
             )
             t1.start()
@@ -3384,9 +3386,7 @@ def main() -> None:
     )
     conv_handler12 = ConversationHandler(
         entry_points=[CommandHandler("end", end_all)],
-        states={
-            COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],
-        },
+        states={COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],},
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler13 = ConversationHandler(
