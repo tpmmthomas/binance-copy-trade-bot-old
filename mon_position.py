@@ -2870,6 +2870,25 @@ class BinanceClient:
         for tradeinfo in df:
             isOpen = False
             types = tradeinfo[0].upper()
+            balance, collateral, coin = 0, 0, ""
+            try:
+                coin = "USDT"
+                for asset in self.client.futures_account()["assets"]:
+                    if asset["asset"] == "USDT":
+                        balance = asset["maxWithdrawAmount"]
+                        break
+                if tradeinfo[1][-4:] == "BUSD":
+                    tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
+                    if not mute:
+                        updater.bot.sendMessage(
+                            chat_id=self.chat_id,
+                            text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.",
+                        )
+            except BinanceAPIException as e:
+                coin = "USDT"
+                balance = "0"
+                logger.error(e)
+            balance = float(balance)
             if types[:4] == "OPEN":
                 isOpen = True
                 positionSide = types[4:]
@@ -2924,25 +2943,7 @@ class BinanceClient:
                         text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
                     )
                 continue
-            balance, collateral, coin = 0, 0, ""
-            try:
-                coin = "USDT"
-                for asset in self.client.futures_account()["assets"]:
-                    if asset["asset"] == "USDT":
-                        balance = asset["maxWithdrawAmount"]
-                        break
-                if tradeinfo[1][-4:] == "BUSD":
-                    tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
-                    if not mute:
-                        updater.bot.sendMessage(
-                            chat_id=self.chat_id,
-                            text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.",
-                        )
-            except BinanceAPIException as e:
-                coin = "USDT"
-                balance = "0"
-                logger.error(e)
-            balance = float(balance)
+            
             latest_price = float(
                 self.client.futures_mark_price(symbol=tradeinfo[1])["markPrice"]
             )
