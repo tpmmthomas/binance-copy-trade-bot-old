@@ -17,7 +17,7 @@ import config.config as cfg
 from selenium import webdriver
 from bs4 import BeautifulSoup
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 import pickle
 from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceOrderException
@@ -210,7 +210,7 @@ class FetchLatestPosition(threading.Thread):
         self.needlev = False
         self.needtmode = False
         self.mute = False
-        self.lastPosTime = datetime.now() + datetime.timedelta(hours=8)
+        self.lastPosTime = datetime.now() + timedelta(hours=8)
         if self.positions is None:
             self.positions = {}
         if isinstance(tmode, int):
@@ -503,8 +503,8 @@ class FetchLatestPosition(threading.Thread):
                 if self.num_no_data > 30:
                     self.num_no_data = 4
                 if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
-                    now = datetime.now() + datetime.timedelta(hours=8)
-                    self.lastPosTime = datetime.now() + datetime.timedelta(hours=8)
+                    now = datetime.now() + timedelta(hours=8)
+                    self.lastPosTime = datetime.now() + timedelta(hours=8)
                     if not self.mute:
                         tosend = (
                             f"Trader {self.name}, Current time: "
@@ -568,8 +568,8 @@ class FetchLatestPosition(threading.Thread):
                 if not toComp.equals(prevdf):
                     isChanged = True
             if isChanged:
-                now = datetime.now() + datetime.timedelta(hours=8)
-                self.lastPosTime = datetime.now() + datetime.timedelta(hours=8)
+                now = datetime.now() + timedelta(hours=8)
+                self.lastPosTime = datetime.now() + timedelta(hours=8)
                 if not self.mute:
                     tosend = (
                         f"Trader {self.name}, Current time: "
