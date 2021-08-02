@@ -220,7 +220,7 @@ def get_newest_trade():
             time.sleep(1)
         logger.info("Received new update.")
         result = q.get()
-        result = result[0]["o"]
+        result = result["o"]
         symbol = result["s"]
         side = result["S"]
         qty = result["q"]
