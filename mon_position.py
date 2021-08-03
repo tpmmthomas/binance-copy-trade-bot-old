@@ -2951,10 +2951,10 @@ class BinanceClient:
             latest_price = float(
                 self.client.futures_mark_price(symbol=tradeinfo[1])["markPrice"]
             )
-            collateral = (latest_price * quant) / leverage[tradeinfo[1]]
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant = round_up(quant, reqstepsize)
+            collateral = (latest_price * quant) / leverage[tradeinfo[1]]
             quant = str(quant)
             if isOpen:
                 if not mute:
