@@ -1,4 +1,5 @@
 # binance-copy-trade-bot (still in development)
+This program uses web scraping to monitor the positions opened by traders sharing their positions on Binance Futures Leaderboard. We then mimic the trade in your account using the Binance api.
 ### Environment setup (Recommended)
 
 #### Using Conda
