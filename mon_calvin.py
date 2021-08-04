@@ -94,6 +94,7 @@ current_stream = None
 lastPositions = "Welcome!"
 longOrShort = {}
 dictLock = threading.Lock()
+stop_update = False
 
 
 def round_up(n, decimals=0):
@@ -102,7 +103,7 @@ def round_up(n, decimals=0):
 
 
 def show_positions():
-    time.sleep(5)
+    time.sleep(3)
     for chat_id in current_users:
         pos = lastPositions
         updater.bot.sendMessage(chat_id=chat_id, text="The latest position:\n" + pos)
@@ -125,7 +126,7 @@ class getStreamData(threading.Thread):
                 exit(0)
             buffer = self.socket.pop_stream_data_from_stream_buffer()
             if buffer is False:
-                time.sleep(5)
+                time.sleep(2)
             else:
                 buffer = json.loads(buffer)
                 if buffer["e"] == "ORDER_TRADE_UPDATE":
@@ -139,25 +140,26 @@ class getStreamData(threading.Thread):
                     #         time.sleep(1)
                     #     q.put((buffer, 1))
                     if buffer["o"]["X"] == "FILLED":
-                        t1 = threading.Thread(target=show_positions)
-                        t1.start()
                         q.put(buffer)
                 logger.info(str(buffer))
 
     def stop(self):
         self.isStop.set()
 
+def reset_positions():
+    time.sleep(3)
+    global stop_update
+    stop_update = False
 
 def get_positions():
     global lastPositions
-    while True:
-        time.sleep(4)
+    global stop_update
+    if not stop_update:
         try:
             result = current_stream.client.futures_position_information()
         except:
             logger.error("Cannot retrieve latest position.")
-            time.sleep(2)
-            continue
+            return
         symbol = []
         size = []
         EnPrice = []
@@ -168,18 +170,9 @@ def get_positions():
         for pos in result:
             if float(pos["positionAmt"]) != 0:
                 symbol.append(pos["symbol"])
-                try:
-                    pside = (
-                        "LONG"
-                        if (float(pos["markPrice"]) - float(pos["entryPrice"]))
-                        / float(pos["unRealizedProfit"])
-                        > 0
-                        else "SHORT"
-                    )
-                except:
-                    pside = "LONG"
                 tsize = pos["positionAmt"]
                 size.append(tsize)
+                pside = "LONG" if float(tsize) >= 0 else "SHORT"
                 EnPrice.append(pos["entryPrice"])
                 MarkPrice.append(pos["markPrice"])
                 PNL.append(pos["unRealizedProfit"])
@@ -210,14 +203,19 @@ def get_positions():
             ).to_string()
         else:
             lastPositions = "No Positions."
+        stop_update = True
+        t = threading.Thread(target=reset_positions)
+        t.start()
 
 
 def get_newest_trade():
     global current_stream
+    global stop_update
     time.sleep(10)
     while True:
         while q.empty():
             time.sleep(1)
+        stop_update = True
         logger.info("Received new update.")
         result = q.get()
         result = result["o"]
@@ -242,6 +240,10 @@ def get_newest_trade():
             )
             if ttype in ["MARKET", "LIMIT"]:
                 current_users[chat_id].open_trade(result, ptype)
+        stop_update = False
+        get_positions()
+        t1 = threading.Thread(target=show_positions)
+        t1.start()
         # else:
         #     result = result[0]["o"]
         #     cid = result["c"]
@@ -454,6 +456,7 @@ def save_to_file(update: Update, context: CallbackContext):
 
 
 def view_position(update: Update, context: CallbackContext):
+    get_positions()
     if isinstance(lastPositions, str):
         updater.bot.sendMessage(chat_id=update.message.chat_id, text=lastPositions)
     else:
