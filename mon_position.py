@@ -24,6 +24,7 @@ from binance.exceptions import BinanceAPIException, BinanceOrderException
 import math
 
 import urllib3
+import urllib
 
 urllib3.disable_warnings()
 # Enable logging
@@ -87,8 +88,7 @@ logger = logging.getLogger(__name__)
 ) = range(50)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
-master_lock = threading.Lock()
-chrome_num = 0
+master_lock = threading.Semaphore(3)
 mutex = threading.Lock()
 options = webdriver.ChromeOptions()
 options.binary_location = cfg.chrome_location
@@ -448,16 +448,11 @@ class FetchLatestPosition(threading.Thread):
         return txs
 
     def run(self):
-        global chrome_num
         logger.info("%s starting %s", self.uname, self.name)
         while not self.isStop.is_set():
             isChanged = False
             time.sleep(self.error * 5.5)
-            while chrome_num >= 3:
-                time.sleep(1)
             master_lock.acquire()
-            chrome_num += 1
-            master_lock.release()
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
@@ -470,9 +465,6 @@ class FetchLatestPosition(threading.Thread):
                     self.driver.get(self.fetch_url)
                 except:
                     self.error += 1
-                    master_lock.acquire()
-                    chrome_num -= 1
-
                     master_lock.release()
                     time.sleep(50)
                     continue
@@ -481,13 +473,9 @@ class FetchLatestPosition(threading.Thread):
                     self.driver.refresh()
                 except:
                     self.error += 1
-                    master_lock.acquire()
-                    chrome_num -= 1
                     master_lock.release()
                     time.sleep(50)
                     continue
-            master_lock.acquire()
-            chrome_num -= 1
             master_lock.release()
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
@@ -853,12 +841,7 @@ class FetchLatestPosition(threading.Thread):
 def retrieveUserName(url):
     success = False
     name = ""
-    global chrome_num
-    while chrome_num >= 3:
-        time.sleep(1)
     master_lock.acquire()
-    chrome_num += 1
-    master_lock.release()
     try:
         myDriver = webdriver.Chrome(cfg.driver_location, options=options)
     except:
@@ -866,16 +849,12 @@ def retrieveUserName(url):
     i = 0
     while not success or name == "No Battle Record Found":
         if i >= 10:
-            master_lock.acquire()
-            chrome_num -= 1
             master_lock.release()
             return None
         i += 1
         try:
             myDriver.get(url)
         except:
-            master_lock.acquire()
-            chrome_num -= 1
             master_lock.release()
             return None
         time.sleep(2)
@@ -889,8 +868,6 @@ def retrieveUserName(url):
             success = True
         except:
             continue
-    master_lock.acquire()
-    chrome_num -= 1
     master_lock.release()
     myDriver.quit()
     return name
@@ -1049,14 +1026,13 @@ def url_check(update: Update, context: CallbackContext) -> int:
             + url
             + "&tradeType=PERPETUAL"
         )
-        myDriver = webdriver.Chrome(cfg.driver_location, options=options)
-        myDriver.get(url)
+        code = urllib.request.urlopen(url).getcode()
+        assert code == 200
     except:
         update.message.reply_text(
             "Sorry! Your UID is invalid. Please try entering again."
         )
         return TRADERURL
-    myDriver.quit()
     traderName = retrieveUserName(url)
     if traderName is None:
         update.message.reply_text(
@@ -3529,7 +3505,10 @@ def main() -> None:
     # chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tp=None,sl=None,tmode=None,lmode=None):
     # for x in userdata:
     #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. You should start receiving notifications now. Remember to change necessary settings.")
-    restore_save_data()
+    try:
+        restore_save_data()
+    except:
+        logger.info("No data to restore.")
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
 
