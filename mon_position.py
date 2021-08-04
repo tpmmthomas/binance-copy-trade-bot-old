@@ -466,7 +466,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     master_lock.release()
-                    time.sleep(50)
+                    time.sleep(52)
                     continue
             else:
                 try:
@@ -474,7 +474,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     master_lock.release()
-                    time.sleep(50)
+                    time.sleep(52)
                     continue
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
@@ -598,7 +598,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver = None
             self.error = 0
             master_lock.release()
-            time.sleep(50)
+            time.sleep(52)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(
