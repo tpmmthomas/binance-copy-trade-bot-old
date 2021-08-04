@@ -88,7 +88,7 @@ logger = logging.getLogger(__name__)
 ) = range(50)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
-master_lock = threading.Semaphore(5)
+master_lock = threading.Semaphore(2)
 mutex = threading.Lock()
 options = webdriver.ChromeOptions()
 options.binary_location = cfg.chrome_location
@@ -466,7 +466,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     master_lock.release()
-                    time.sleep(52)
+                    time.sleep(60)
                     continue
             else:
                 try:
@@ -474,8 +474,9 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     master_lock.release()
-                    time.sleep(52)
+                    time.sleep(60)
                     continue
+            master_lock.release()
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
             x = soup.get_text()
@@ -519,7 +520,6 @@ class FetchLatestPosition(threading.Thread):
                 if self.num_no_data >= 3:
                     self.prev_df = "x"
                     self.first_run = False
-                master_lock.release()
                 self.runtimes += 1
                 if self.runtimes >= 10:
                     self.runtimes = 0
@@ -534,11 +534,9 @@ class FetchLatestPosition(threading.Thread):
                 output, calmargin = format_results(x, self.driver.page_source)
             except:
                 self.error += 1
-                master_lock.release()
                 continue
             if output["data"].empty:
                 self.error += 1
-                master_lock.release()
                 continue
             if self.toTrade and self.lmode == 0:
                 symbols = output["data"]["symbol"].values
@@ -554,7 +552,6 @@ class FetchLatestPosition(threading.Thread):
                     prevdf = self.prev_df[["symbol", "size", "Entry Price"]]
                 except:
                     self.error += 1
-                    master_lock.release()
                     continue
                 if not toComp.equals(prevdf):
                     isChanged = True
@@ -597,8 +594,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            master_lock.release()
-            time.sleep(52)
+            time.sleep(60)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(
