@@ -453,7 +453,6 @@ class FetchLatestPosition(threading.Thread):
             isChanged = False
             time.sleep(self.error * 5.5)
             master_lock.acquire()
-            logger.info("%s %s acquired lock.", self.uname, self.name)
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
@@ -488,7 +487,6 @@ class FetchLatestPosition(threading.Thread):
             idx3 = x.find("No data")
             x = x[idx:idx2]
             if idx3 != -1:
-                logger.info("%s %s No data.", self.uname, self.name)
                 self.num_no_data += 1
                 if self.num_no_data > 21:
                     self.num_no_data = 4
