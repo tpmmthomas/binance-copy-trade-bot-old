@@ -2711,7 +2711,7 @@ class BinanceClient:
                                 stopLoss,
                             )
                         except:
-                            return
+                            pass
                     else:
                         idx = CurrentUsers[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
@@ -2754,6 +2754,9 @@ class BinanceClient:
                                     CurrentUsers[self.chat_id].tpslids[positionKey] = []
                                 except BinanceAPIException as e:
                                     logger.error(str(e))
+                    logger.info(
+                        f"DEBUG {self.uname} {positionKey}: {CurrentUsers[self.chat_id].threads[idx].positions[positionKey]}"
+                    )
                     return
                 elif result["status"] in [
                     "CANCELED",
