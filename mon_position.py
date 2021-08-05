@@ -478,8 +478,7 @@ class FetchLatestPosition(threading.Thread):
                     time.sleep(60)
                     continue
             master_lock.release()
-            logger.info("%s %s done lock.", self.uname, self.name)
-            time.sleep(5)
+            time.sleep(4)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
             x = soup.get_text()
             ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
@@ -491,7 +490,7 @@ class FetchLatestPosition(threading.Thread):
             if idx3 != -1:
                 logger.info("%s %s No data.", self.uname, self.name)
                 self.num_no_data += 1
-                if self.num_no_data > 30:
+                if self.num_no_data > 21:
                     self.num_no_data = 4
                 if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
                     now = datetime.now() + timedelta(hours=8)
@@ -558,7 +557,6 @@ class FetchLatestPosition(threading.Thread):
                     continue
                 if not toComp.equals(prevdf):
                     isChanged = True
-            logger.info("%s %s Completed change cal.", self.uname, self.name)
             if isChanged:
                 now = datetime.now() + timedelta(hours=8)
                 self.lastPosTime = datetime.now() + timedelta(hours=8)
@@ -598,8 +596,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            logger.info("%s %s going to sleep.", self.uname, self.name)
-            time.sleep(50)
+            time.sleep(45)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(
@@ -2743,17 +2740,24 @@ class BinanceClient:
                             if (
                                 pos["positionSide"] == result["positionSide"]
                                 and float(pos["positionAmt"]) == 0
-                                and positionKey in CurrentUsers[self.chat_id].tpslids
                             ):
-                                idlist = CurrentUsers[self.chat_id].tpslids[positionKey]
-                                try:
-                                    for id in idlist:
-                                        self.client.futures_cancel_order(
-                                            symbol=symbol, orderId=id
-                                        )
-                                    CurrentUsers[self.chat_id].tpslids[positionKey] = []
-                                except BinanceAPIException as e:
-                                    logger.error(str(e))
+                                if positionKey in CurrentUsers[self.chat_id].tpslids:
+                                    idlist = CurrentUsers[self.chat_id].tpslids[
+                                        positionKey
+                                    ]
+                                    try:
+                                        for id in idlist:
+                                            self.client.futures_cancel_order(
+                                                symbol=symbol, orderId=id
+                                            )
+                                        CurrentUsers[self.chat_id].tpslids[
+                                            positionKey
+                                        ] = []
+                                    except BinanceAPIException as e:
+                                        logger.error(str(e))
+                                CurrentUsers[self.chat_id].threads[idx].positions[
+                                    positionKey
+                                ] = 0
                     logger.info(
                         f"DEBUG {self.uname} {positionKey}: {CurrentUsers[self.chat_id].threads[idx].positions[positionKey]}"
                     )
