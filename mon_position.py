@@ -22,6 +22,7 @@ import pickle
 from binance.client import Client
 from binance.exceptions import BinanceAPIException, BinanceOrderException
 import math
+import random
 
 import urllib3
 import urllib
@@ -466,7 +467,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     master_lock.release()
-                    time.sleep(60)
+                    time.sleep(75)
                     continue
             else:
                 try:
@@ -474,7 +475,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     master_lock.release()
-                    time.sleep(60)
+                    time.sleep(75)
                     continue
             master_lock.release()
             time.sleep(4)
@@ -594,7 +595,8 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            time.sleep(45)
+            sleeptime = random.randint(45, 60)
+            time.sleep(sleeptime)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(
