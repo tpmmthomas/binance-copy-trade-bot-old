@@ -13,9 +13,6 @@ import logging
 import math
 import queue
 import pickle
-from unicorn_binance_websocket_api.unicorn_binance_websocket_api_manager import (
-    BinanceWebSocketApiManager,
-)
 import telegram
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
 from telegram.ext import (
@@ -91,8 +88,6 @@ updater = Updater(cnt.bot_token2)
 
 current_users = {}
 current_stream = None
-lastPositions = "Welcome!"
-longOrShort = {}
 dictLock = threading.Lock()
 stop_update = False
 
@@ -116,88 +111,40 @@ def show_positions():
 class getStreamData(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
-        self.socket = BinanceWebSocketApiManager(exchange="binance.com-futures")
-        self.socket.create_stream(
-            ["arr"], ["!userData"], api_key=cnt.api_key, api_secret=cnt.api_secret
-        )
-        self.isStop = threading.Event()
         self.client = Client(cnt.api_key, cnt.api_secret)
+        self.lastPositions = None
 
     def run(self):
-        time.sleep(2)
-        while not self.isStop.is_set():
-            if self.socket.is_manager_stopping():
-                exit(0)
-            buffer = self.socket.pop_stream_data_from_stream_buffer()
-            if buffer is False:
-                time.sleep(2)
-            else:
-                buffer = json.loads(buffer)
-                if buffer["e"] == "ORDER_TRADE_UPDATE":
-                    logger.info(f"DEBUG: {buffer['o']['X']}")
-                    # if buffer["o"]["X"] == "NEW":
-                    #     while q.full():
-                    #         time.sleep(1)
-                    #     q.put((buffer, 0))
-                    # elif buffer["o"]["X"] == "CANCELED":
-                    #     while q.full():
-                    #         time.sleep(1)
-                    #     q.put((buffer, 1))
-                    if buffer["o"]["X"] == "FILLED":
-                        q.put(buffer)
-                logger.info(str(buffer))
-
-    def stop(self):
-        self.isStop.set()
-
-
-def reset_positions():
-    time.sleep(3)
-    global stop_update
-    stop_update = False
-
-
-def get_positions():
-    global lastPositions
-    global stop_update
-    if not stop_update:
-        try:
-            result = current_stream.client.futures_position_information()
-        except:
-            logger.error("Cannot retrieve latest position.")
-            return
-        symbol = []
-        size = []
-        EnPrice = []
-        MarkPrice = []
-        PNL = []
-        margin = []
-        listTradingSymbols = []
-        for pos in result:
-            if float(pos["positionAmt"]) != 0:
-                symbol.append(pos["symbol"])
-                tsize = pos["positionAmt"]
-                size.append(tsize)
-                pside = "LONG" if float(tsize) >= 0 else "SHORT"
-                EnPrice.append(pos["entryPrice"])
-                MarkPrice.append(pos["markPrice"])
-                PNL.append(pos["unRealizedProfit"])
-                margin.append(pos["leverage"])
-                longOrShort[pos["symbol"]] = pside
-                listTradingSymbols.append(pos["symbol"])
-                for user in current_users:
-                    if current_users[user].lmode == 0:
-                        current_users[user].leverage[pos["symbol"]] = int(
-                            pos["leverage"]
-                        )
-        todel = []
-        for symbols in longOrShort:
-            if not symbols in listTradingSymbols:
-                todel.append(symbols)
-        for symbol in todel:
-            del longOrShort[symbol]
-        if len(symbol) > 0 and len(size) > 0:
-            lastPositions = pd.DataFrame(
+        while True:
+            time.sleep(1.5)
+            try:
+                result = self.client.futures_position_information()
+            except:
+                logger.error("Cannot retrieve latest position.")
+                return
+            symbol = []
+            size = []
+            EnPrice = []
+            MarkPrice = []
+            PNL = []
+            margin = []
+            listTradingSymbols = []
+            for pos in result:
+                if float(pos["positionAmt"]) != 0:
+                    symbol.append(pos["symbol"])
+                    tsize = pos["positionAmt"]
+                    size.append(tsize)
+                    EnPrice.append(pos["entryPrice"])
+                    MarkPrice.append(pos["markPrice"])
+                    PNL.append(pos["unRealizedProfit"])
+                    margin.append(pos["leverage"])
+                    listTradingSymbols.append(pos["symbol"])
+                    for user in current_users:
+                        if current_users[user].lmode == 0:
+                            current_users[user].leverage[pos["symbol"]] = int(
+                                pos["leverage"]
+                            )
+            newPosition = pd.DataFrame(
                 {
                     "symbol": symbol,
                     "size": size,
@@ -206,69 +153,204 @@ def get_positions():
                     "PNL": PNL,
                     "leverage": margin,
                 }
-            ).to_string()
-        else:
-            lastPositions = "No Positions."
-        stop_update = True
-        t = threading.Thread(target=reset_positions)
-        t.start()
-
-
-def get_newest_trade():
-    global current_stream
-    global stop_update
-    time.sleep(10)
-    while True:
-        while q.empty():
-            time.sleep(1)
-        stop_update = True
-        logger.info("Received new update.")
-        result = q.get()
-        result = result["o"]
-        symbol = result["s"]
-        side = result["S"]
-        qty = result["q"]
-        ptype = result["o"]
-        if side == "BUY" and not symbol in longOrShort:
-            ptype = "OpenLong"
-        elif side == "SELL" and not symbol in longOrShort:
-            ptype = "OpenShort"
-        elif side == "BUY":
-            ptype = "OpenLong" if longOrShort[symbol] == "LONG" else "CloseShort"
-        else:
-            ptype = "OpenShort" if longOrShort[symbol] == "SHORT" else "CloseLong"
-        price = result["p"]
-        ttype = result["o"]
-        for chat_id in current_users:
-            updater.bot.sendMessage(
-                chat_id=chat_id,
-                text=f"The following trade is opened in Kevin's account:\nSymbol: {symbol}\nType: {ptype}\nExcPrice: {price}\nQuantity: {qty}\nOrder Type: {ttype}",
             )
-            if ttype in ["MARKET", "LIMIT"]:
-                current_users[chat_id].open_trade(result, ptype)
-        stop_update = False
-        t1 = threading.Thread(target=show_positions)
-        t1.start()
-        # else:
-        #     result = result[0]["o"]
-        #     cid = result["c"]
-        #     symbol = result["s"]
-        #     for chat_id in current_users:
-        #         current_users[chat_id].cancel_trade(cid, symbol)
-        #         updater.bot.sendMessage(
-        #             chat_id=chat_id, text="The trade was cancelled in Kevin's account."
-        #         )
+            isDiff, diff = self.compare(self.lastPositions, newPosition)
+            if isDiff:
+                # logger.info("Yes")
+                process_newest_position(diff)
+            self.lastPositions = newPosition
+
+    def compare(self, df, df2):
+        if df is None or df2 is None:
+            return False, None
+        toComp = df[["symbol", "size", "Entry Price"]]
+        toComp2 = df2[["symbol", "size", "Entry Price"]]
+        if toComp.equals(toComp2):
+            return False, None
+        txtype = []
+        txsymbol = []
+        txsize = []
+        executePrice = []
+        if df.empty:
+            for index, row in df2.iterrows():
+                size = row["size"]
+                if isinstance(size, str):
+                    size = size.replace(",", "")
+                size = float(size)
+                if size > 0:
+                    txtype.append("OpenLong")
+                    txsymbol.append(row["symbol"])
+                    txsize.append(size)
+                    executePrice.append(row["Entry Price"])
+                else:
+                    txtype.append("OpenShort")
+                    txsymbol.append(row["symbol"])
+                    txsize.append(size)
+                    executePrice.append(row["Entry Price"])
+            txs = pd.DataFrame(
+                {
+                    "txtype": txtype,
+                    "symbol": txsymbol,
+                    "size": txsize,
+                    "ExecPrice": executePrice,
+                }
+            )
+        elif df2.empty:
+            for index, row in df.iterrows():
+                size = row["size"]
+                if isinstance(size, str):
+                    size = size.replace(",", "")
+                size = float(size)
+                if size > 0:
+                    txtype.append("CloseLong")
+                    txsymbol.append(row["symbol"])
+                    txsize.append(-size)
+                    executePrice.append(row["Mark Price"])
+                else:
+                    txtype.append("CloseShort")
+                    txsymbol.append(row["symbol"])
+                    txsize.append(-size)
+                    executePrice.append(row["Mark Price"])
+            txs = pd.DataFrame(
+                {
+                    "txtype": txtype,
+                    "symbol": txsymbol,
+                    "size": txsize,
+                    "ExecPrice": executePrice,
+                }
+            )
+        else:
+            df, df2 = df.copy(), df2.copy()
+            for index, row in df.iterrows():
+                hasChanged = False
+                temp = df2["symbol"] == row["symbol"]
+                idx = df2.index[temp]
+                size = row["size"]
+                if isinstance(size, str):
+                    size = size.replace(",", "")
+                size = float(size)
+                oldentry = row["Entry Price"]
+                if isinstance(oldentry, str):
+                    oldentry = oldentry.replace(",", "")
+                oldentry = float(oldentry)
+                oldmark = row["Mark Price"]
+                if isinstance(oldmark, str):
+                    oldmark = oldmark.replace(",", "")
+                oldmark = float(oldmark)
+                isPositive = size >= 0
+                for r in idx:
+                    df2row = df2.loc[r].values
+                    newsize = df2row[1]
+                    if isinstance(newsize, str):
+                        newsize = newsize.replace(",", "")
+                    newsize = float(newsize)
+                    newentry = df2row[2]
+                    if isinstance(newentry, str):
+                        newentry = newentry.replace(",", "")
+                    newentry = float(newentry)
+                    newmark = df2row[3]
+                    if isinstance(newmark, str):
+                        newmark = newmark.replace(",", "")
+                    newmark = float(newmark)
+                    if newsize == size:
+                        df2 = df2.drop(r)
+                        hasChanged = True
+                        break
+                    if isPositive and newsize > 0:
+                        changesize = newsize - size
+                        if changesize > 0:
+                            txtype.append("OpenLong")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                            try:
+                                exp = (
+                                    newentry * newsize - oldentry * size
+                                ) / changesize
+                            except:
+                                exp = 0
+                            executePrice.append(exp)
+                        else:
+                            txtype.append("CloseLong")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                            executePrice.append(newmark)
+                        df2 = df2.drop(r)
+                        hasChanged = True
+                        break
+                    if not isPositive and newsize < 0:
+                        changesize = newsize - size
+                        if changesize > 0:
+                            txtype.append("CloseShort")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                            executePrice.append(newmark)
+                        else:
+                            txtype.append("OpenShort")
+                            txsymbol.append(df2row[0])
+                            txsize.append(changesize)
+                            try:
+                                exp = (
+                                    newentry * newsize - oldentry * size
+                                ) / changesize
+                            except:
+                                exp = 0
+                            executePrice.append(exp)
+                        df2 = df2.drop(r)
+                        hasChanged = True
+                        break
+                if not hasChanged:
+                    if size > 0:
+                        txtype.append("CloseLong")
+                        txsymbol.append(row["symbol"])
+                        txsize.append(-size)
+                        executePrice.append(oldmark)
+                    else:
+                        txtype.append("CloseShort")
+                        txsymbol.append(row["symbol"])
+                        txsize.append(-size)
+                        executePrice.append(oldmark)
+            for index, row in df2.iterrows():
+                size = row["size"]
+                if isinstance(size, str):
+                    size = size.replace(",", "")
+                size = float(size)
+                if size > 0:
+                    txtype.append("OpenLong")
+                    txsymbol.append(row["symbol"])
+                    txsize.append(size)
+                    executePrice.append(row["Entry Price"])
+                else:
+                    txtype.append("OpenShort")
+                    txsymbol.append(row["symbol"])
+                    txsize.append(size)
+                    executePrice.append(row["Entry Price"])
+            txs = pd.DataFrame(
+                {
+                    "txType": txtype,
+                    "symbol": txsymbol,
+                    "size": txsize,
+                    "ExecPrice": executePrice,
+                }
+            )
+        return True, txs
+
+    def stop(self):
+        self.isStop.set()
+
+
+def process_newest_position(diff):
+    for chat_id in current_users:
+        tosend = (
+            f"*The positions changed in Kevin's account:*\n" + diff.to_string() + "\n"
+        )
+        updater.bot.sendMessage(chat_id=chat_id, text=tosend)
+        current_users[chat_id].open_trade(diff)
 
 
 def automatic_reload():
     global current_stream
     while True:
         time.sleep(23 * 60 * 60)
-        current_stream.stop()
-        time.sleep(1)
-        newStream = getStreamData()
-        newStream.start()
-        current_stream = newStream
         save_to_file(None, None)
 
 
@@ -461,12 +543,14 @@ def save_to_file(update: Update, context: CallbackContext):
 
 
 def view_position(update: Update, context: CallbackContext):
-    get_positions()
-    if isinstance(lastPositions, str):
-        updater.bot.sendMessage(chat_id=update.message.chat_id, text=lastPositions)
+    position = current_stream.lastPositions
+    if position is None:
+        updater.bot.sendMessage(chat_id=update.message.chat_id, text="Error.")
+    elif position.empty:
+        updater.bot.sendMessage(chat_id=update.message.chat_id, text="No Position.")
     else:
         updater.bot.sendMessage(
-            chat_id=update.message.chat_id, text=lastPositions.to_string()
+            chat_id=update.message.chat_id, text=position.to_string()
         )
     return
 
@@ -1255,187 +1339,136 @@ class userClient:
         # if cid in self.unfulfilledPos:
         #     del self.unfulfilledPos[cid]
 
-    def open_trade(self, tradeinfo, type):
+    def open_trade(self, df):
         logger.info("Attempting to open trade.")
-        logger.info(str(tradeinfo))
         self.reload()
-        balance, collateral, coin = 0, 0, ""
-        try:
-            coin = "USDT"
-            for asset in self.client.futures_account()["assets"]:
-                if asset["asset"] == "USDT":
-                    balance = asset["maxWithdrawAmount"]
-                    break
-            if tradeinfo["s"][-4:] == "BUSD":
-                tradeinfo["s"] = tradeinfo["s"][:-4] + "USDT"
+        logger.info("DEBUG\n" + df.to_string())
+        df = df.values
+        for tradeinfo in df:
+            isOpen = False
+            types = tradeinfo[0].upper()
+            balance, collateral, coin = 0, 0, ""
+            try:
+                coin = "USDT"
+                for asset in self.client.futures_account()["assets"]:
+                    if asset["asset"] == "USDT":
+                        balance = asset["maxWithdrawAmount"]
+                        break
+                if tradeinfo[1][-4:] == "BUSD":
+                    tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id,
+                        text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.",
+                    )
+            except BinanceAPIException as e:
+                coin = "USDT"
+                balance = "0"
+                logger.error(e)
+            balance = float(balance)
+            if types[:4] == "OPEN":
+                isOpen = True
+                positionSide = types[4:]
+                if positionSide == "LONG":
+                    side = "BUY"
+                else:
+                    side = "SELL"
+                try:
+                    self.client.futures_change_leverage(
+                        symbol=tradeinfo[1], leverage=self.leverage[tradeinfo[1]]
+                    )
+                except:
+                    pass
+            else:
+                positionSide = types[5:]
+                if positionSide == "LONG":
+                    side = "SELL"
+                else:
+                    side = "BUY"
+            if not tradeinfo[1] in self.proportion:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.",
+                    text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol.",
                 )
-                # mids.append(result.message_id)
-        except BinanceAPIException as e:
-            coin = "USDT"
-            balance = "0"
-            logger.error(e)
-        balance = float(balance)
-        # mids = []
-        isOpen = False
-        type = type.upper()
-        ps = ""
-        if type[:4] == "OPEN":
-            isOpen = True
-            ps = type[4:]
-        else:
-            ps = type[5:]
-        try:
-            self.client.futures_change_leverage(
-                symbol=tradeinfo["s"], leverage=self.leverage[tradeinfo["s"]]
-            )
-        except:
-            pass
-        quant = abs(float(tradeinfo["q"])) * self.proportion[tradeinfo["s"]]
-        checkKey = tradeinfo["s"].upper() + ps
-        if not isOpen and (
-            (checkKey not in self.positions) or (self.positions[checkKey] < quant)
-        ):
-            if checkKey not in self.positions or self.positions[checkKey] == 0:
+                continue
+            quant = abs(tradeinfo[2]) * self.proportion[tradeinfo[1]]
+            checkKey = tradeinfo[1].upper() + positionSide
+            if not isOpen and (
+                (checkKey not in self.positions) or (self.positions[checkKey] < quant)
+            ):
+                if checkKey not in self.positions or self.positions[checkKey] == 0:
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id,
+                        text=f"Close {checkKey}: This trade will not be executed because your opened positions with this trader is 0.",
+                    )
+                    continue
+                elif self.positions[checkKey] < quant:
+                    quant = min(self.positions[checkKey], quant)
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id,
+                        text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
+                    )
+            elif not isOpen and quant / self.positions[checkKey] > 0.9:
+                quant = max(self.positions[checkKey], quant)
+            if quant == 0:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text=f"Close {checkKey}: This trade will not be executed because your opened positions with this trader is 0.",
+                    text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
                 )
-                return
-            elif self.positions[checkKey] < quant:
-                quant = min(self.positions[checkKey], quant)
+                continue
+            latest_price = float(
+                self.client.futures_mark_price(symbol=tradeinfo[1])["markPrice"]
+            )
+            reqticksize = self.ticksize[tradeinfo[1]]
+            reqstepsize = self.stepsize[tradeinfo[1]]
+            quant = round_up(quant, reqstepsize)
+            collateral = (latest_price * quant) / self.leverage[tradeinfo[1]]
+            quant = str(quant)
+            if isOpen:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
+                    text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.",
                 )
-                # mids.append(result.message_id)
-        elif not isOpen and quant / self.positions[checkKey] > 0.9:
-            quant = max(self.positions[checkKey], quant)
-        if quant == 0:
-            updater.bot.sendMessage(
-                chat_id=self.chat_id,
-                text=f"{tradeinfo['S']} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
-            )
-            return
-
-        latest_price = float(
-            self.client.futures_mark_price(symbol=tradeinfo["s"])["markPrice"]
-        )
-        reqticksize = self.ticksize[tradeinfo["s"]]
-        reqstepsize = self.stepsize[tradeinfo["s"]]
-        quant = round_up(quant, reqstepsize)
-        collateral = (latest_price * quant) / self.leverage[tradeinfo["s"]]
-        quant = str(quant)
-        if isOpen:
-            updater.bot.sendMessage(
-                chat_id=self.chat_id,
-                text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.",
-            )
-            # mids.append(result.message_id)
-            if collateral >= balance * self.safety_ratio:
-                updater.bot.sendMessage(
-                    chat_id=self.chat_id,
-                    text=f"WARNING: this trade will take up more than {self.safety_ratio*100}% of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.",
+                if collateral >= balance * self.safety_ratio:
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id,
+                        text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.",
+                    )
+                    continue
+            if isinstance(tradeinfo[3], str):
+                tradeinfo[3] = tradeinfo[3].replace(",", "")
+            # target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
+            try:
+                tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
+                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                rvalue = self.client.futures_create_order(
+                    symbol=tradeinfo[1],
+                    side=side,
+                    positionSide=positionSide,
+                    type="MARKET",
+                    quantity=quant,
                 )
-                return
-        target_price = "{:0.0{}f}".format(float(tradeinfo["p"]), reqticksize)
-        # if tradeinfo["o"] == "MARKET":
-        try:
-            tosend = f"Executing the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: MARKET\nquantity: {quant}"
-            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-            # mids.append(result.message_id)
-            rvalue = self.client.futures_create_order(
-                symbol=tradeinfo["s"],
-                side=tradeinfo["S"],
-                positionSide=ps,
-                type="MARKET",
-                quantity=quant,
-            )
-            logger.info(f"{self.uname} opened order.")
-            # self.unfulfilledPos[cid] = (rvalue["orderId"], mids)
-            positionKey = tradeinfo["s"] + ps
-            t1 = threading.Thread(
-                target=self.query_trade,
-                args=(
-                    rvalue["orderId"],
-                    tradeinfo["s"],
-                    positionKey,
-                    isOpen,
-                    self.uname,
-                    self.take_profit_percent[tradeinfo["s"]],
-                    self.stop_loss_percent[tradeinfo["s"]],
-                    self.leverage[tradeinfo["s"]],
-                ),
-            )
-            t1.start()
-        except BinanceAPIException as e:
-            logger.error(e)
-            if not isOpen and str(e).find("2022") >= 0:
-                positionKey = tradeinfo["s"] + ps
-                self.positions[positionKey] = 0
-            updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
-        # elif tradeinfo["o"] == "LIMIT":
-        #     try:
-        #         target_price = float(target_price)
-        #         if ps == "LONG":
-        #             target_price = min(latest_price, target_price)
-        #         else:
-        #             target_price = max(latest_price, target_price)
-        #     except:
-        #         pass
-        #     target_price = "{:0.0{}f}".format(float(target_price), reqticksize)
-        #     try:
-        #         tosend = f"Executing the following trade:\nSymbol: {tradeinfo['s']}\nSide: {tradeinfo['S']}\npositionSide: {ps}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
-        #         result = updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-        #         # mids.append(result.message_id)
-        #         rvalue = self.client.futures_create_order(
-        #             symbol=tradeinfo["s"],
-        #             side=tradeinfo["S"],
-        #             positionSide=ps,
-        #             type="LIMIT",
-        #             quantity=quant,
-        #             price=target_price,
-        #             timeInForce="GTC",
-        #         )
-        #         logger.info(f"{self.uname} opened order.")
-        #         # self.unfulfilledPos[cid] = (rvalue["orderId"], mids)
-        #         positionKey = tradeinfo["s"] + ps
-        #         t1 = threading.Thread(
-        #             target=self.query_trade,
-        #             args=(
-        #                 rvalue["orderId"],
-        #                 tradeinfo["s"],
-        #                 positionKey,
-        #                 isOpen,
-        #                 self.uname,
-        #                 self.take_profit_percent[tradeinfo["s"]],
-        #                 self.stop_loss_percent[tradeinfo["s"]],
-        #                 self.leverage[tradeinfo["s"]],
-        #                 tosend,
-        #                 cid,
-        #             ),
-        #         )
-        #         t1.start()
-        #     except BinanceAPIException as e:
-        #         logger.error(e)
-        #         updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
-
-    # def cancel_trade(self, cid, symbol):
-    #     logger.info("Trying to cancel trade")
-    #     if cid in self.unfulfilledPos:
-    #         logger.info(f"{self.uname} canceled order.")
-    #         for mid in self.unfulfilledPos[cid][1]:
-    #             updater.bot.delete_message(chat_id=self.chat_id, message_id=mid)
-    #         try:
-    #             self.client.futures_cancel_order(
-    #                 symbol=symbol, orderId=self.unfulfilledPos[cid][0]
-    #             )
-    #         except BinanceAPIException as e:
-    #             logger.error(str(e))
-    #             updater.bot.send_message(chat_id=self.chat_id, text=str(e))
-    #         del self.unfulfilledPos[cid]
+                logger.info(f"{self.uname} opened order.")
+                positionKey = tradeinfo[1] + positionSide
+                t1 = threading.Thread(
+                    target=self.query_trade,
+                    args=(
+                        rvalue["orderId"],
+                        tradeinfo[1],
+                        positionKey,
+                        isOpen,
+                        self.uname,
+                        self.take_profit_percent[tradeinfo[1]],
+                        self.stop_loss_percent[tradeinfo[1]],
+                        self.leverage[tradeinfo[1]],
+                    ),
+                )
+                t1.start()
+            except BinanceAPIException as e:
+                logger.error(e)
+                if not isOpen and str(e).find("2022") >= 0:
+                    positionKey = tradeinfo[1] + positionSide
+                    self.positions[positionKey] = 0
+                updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
 
     def reload(self):
         info = self.client.futures_exchange_info()
@@ -1819,10 +1852,6 @@ def main():
         logger.info("No data to restore.")
     thr = threading.Thread(target=automatic_reload)
     thr.start()
-    thr2 = threading.Thread(target=get_newest_trade)
-    thr2.start()
-    thr3 = threading.Thread(target=get_positions)
-    thr3.start()
 
     updater.start_polling()
     updater.idle()
