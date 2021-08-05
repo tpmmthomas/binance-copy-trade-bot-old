@@ -453,6 +453,7 @@ class FetchLatestPosition(threading.Thread):
             isChanged = False
             time.sleep(self.error * 5.5)
             master_lock.acquire()
+            logger.info("%s %s acquired lock.", self.uname, self.name)
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.mute:
@@ -477,6 +478,7 @@ class FetchLatestPosition(threading.Thread):
                     time.sleep(60)
                     continue
             master_lock.release()
+            logger.info("%s %s done lock.", self.uname, self.name)
             time.sleep(5)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
             x = soup.get_text()
@@ -487,6 +489,7 @@ class FetchLatestPosition(threading.Thread):
             idx3 = x.find("No data")
             x = x[idx:idx2]
             if idx3 != -1:
+                logger.info("%s %s No data.", self.uname, self.name)
                 self.num_no_data += 1
                 if self.num_no_data > 30:
                     self.num_no_data = 4
@@ -555,6 +558,7 @@ class FetchLatestPosition(threading.Thread):
                     continue
                 if not toComp.equals(prevdf):
                     isChanged = True
+            logger.info("%s %s Completed change cal.", self.uname, self.name)
             if isChanged:
                 now = datetime.now() + timedelta(hours=8)
                 self.lastPosTime = datetime.now() + timedelta(hours=8)
@@ -594,7 +598,8 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            time.sleep(60)
+            logger.info("%s %s going to sleep.", self.uname, self.name)
+            time.sleep(50)
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(

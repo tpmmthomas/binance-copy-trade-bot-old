@@ -103,7 +103,11 @@ def round_up(n, decimals=0):
 
 
 def show_positions():
-    time.sleep(3)
+    get_positions()
+    time.sleep(2)
+    global stop_update
+    stop_update = False
+    get_positions()
     for chat_id in current_users:
         pos = lastPositions
         updater.bot.sendMessage(chat_id=chat_id, text="The latest position:\n" + pos)
@@ -146,10 +150,12 @@ class getStreamData(threading.Thread):
     def stop(self):
         self.isStop.set()
 
+
 def reset_positions():
     time.sleep(3)
     global stop_update
     stop_update = False
+
 
 def get_positions():
     global lastPositions
@@ -241,7 +247,6 @@ def get_newest_trade():
             if ttype in ["MARKET", "LIMIT"]:
                 current_users[chat_id].open_trade(result, ptype)
         stop_update = False
-        get_positions()
         t1 = threading.Thread(target=show_positions)
         t1.start()
         # else:
