@@ -1177,17 +1177,19 @@ class userClient:
                             if (
                                 pos["positionSide"] == result["positionSide"]
                                 and float(pos["positionAmt"]) == 0
-                                and positionKey in self.tpslids
                             ):
-                                idlist = self.tpslids[positionKey]
-                                try:
-                                    for id in idlist:
-                                        self.client.futures_cancel_order(
-                                            symbol=symbol, orderId=id
-                                        )
-                                    self.tpslids[positionKey] = []
-                                except BinanceAPIException as e:
-                                    logger.error(str(e))
+                                if positionKey in self.tpslids:
+                                    idlist = self.tpslids[positionKey]
+                                    try:
+                                        for id in idlist:
+                                            self.client.futures_cancel_order(
+                                                symbol=symbol, orderId=id
+                                            )
+                                        self.tpslids[positionKey] = []
+                                    except BinanceAPIException as e:
+                                        logger.error(str(e))
+                                self.positions[positionKey] = 0
+
                     return
                 elif result["status"] in [
                     "CANCELED",
@@ -1321,7 +1323,11 @@ class userClient:
         latest_price = float(
             self.client.futures_mark_price(symbol=tradeinfo["s"])["markPrice"]
         )
+        reqticksize = self.ticksize[tradeinfo["s"]]
+        reqstepsize = self.stepsize[tradeinfo["s"]]
+        quant = round_up(quant, reqstepsize)
         collateral = (latest_price * quant) / self.leverage[tradeinfo["s"]]
+        quant = str(quant)
         if isOpen:
             updater.bot.sendMessage(
                 chat_id=self.chat_id,
@@ -1334,10 +1340,6 @@ class userClient:
                     text=f"WARNING: this trade will take up more than {self.safety_ratio*100}% of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.",
                 )
                 return
-        reqticksize = self.ticksize[tradeinfo["s"]]
-        reqstepsize = self.stepsize[tradeinfo["s"]]
-        quant = round_up(quant, reqstepsize)
-        quant = str(quant)
         target_price = "{:0.0{}f}".format(float(tradeinfo["p"]), reqticksize)
         # if tradeinfo["o"] == "MARKET":
         try:

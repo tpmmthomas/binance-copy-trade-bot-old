@@ -2933,7 +2933,6 @@ class BinanceClient:
                         text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
                     )
                 continue
-
             latest_price = float(
                 self.client.futures_mark_price(symbol=tradeinfo[1])["markPrice"]
             )
