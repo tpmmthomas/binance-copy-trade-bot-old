@@ -196,7 +196,7 @@ def get_positions():
                 todel.append(symbols)
         for symbol in todel:
             del longOrShort[symbol]
-        if len(symbol) > 0:
+        if len(symbol) > 0 and len(size) > 0:
             lastPositions = pd.DataFrame(
                 {
                     "symbol": symbol,
