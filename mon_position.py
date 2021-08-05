@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 ) = range(50)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
-master_lock = threading.Semaphore(3)
+master_lock = threading.Semaphore(2)
 mutex = threading.Lock()
 options = webdriver.ChromeOptions()
 options.binary_location = cfg.chrome_location
@@ -477,8 +477,9 @@ class FetchLatestPosition(threading.Thread):
                     master_lock.release()
                     time.sleep(75)
                     continue
-            time.sleep(3)
+            time.sleep(1)
             master_lock.release()
+            time.sleep(3)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
             x = soup.get_text()
             ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
@@ -595,7 +596,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            sleeptime = random.randint(45, 60)
+            sleeptime = random.randint(45, 59)
             time.sleep(sleeptime)
         if self.driver is not None:
             self.driver.quit()
