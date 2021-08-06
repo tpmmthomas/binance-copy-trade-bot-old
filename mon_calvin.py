@@ -157,7 +157,7 @@ class getStreamData(threading.Thread):
             isDiff, diff = self.compare(self.lastPositions, newPosition)
             if isDiff:
                 # logger.info("Yes")
-                process_newest_position(diff)
+                process_newest_position(diff,newPosition)
             self.lastPositions = newPosition
 
     def compare(self, df, df2):
@@ -338,8 +338,12 @@ class getStreamData(threading.Thread):
         self.isStop.set()
 
 
-def process_newest_position(diff):
+def process_newest_position(diff,df):
     for chat_id in current_users:
+        if df.empty:
+            updater.bot.sendMessage(chat_id=chat_id,text="The newest position:\nNo Position.")
+        else:
+            updater.bot.sendMessage(chat_id=chat_id,text="The newest position:\n"+df.to_string())
         tosend = (
             f"*The positions changed in Kevin's account:*\n" + diff.to_string() + "\n"
         )
