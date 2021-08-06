@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
     TRADERURL,
     MUTE1,
     MUTE2,
+    MUTE3,
     ALLPROP2,
     REALSETPROP4,
     LEVTRADER6,
@@ -86,7 +87,7 @@ logger = logging.getLogger(__name__)
     PROPSYM2,
     REALSETPROP3,
     SAFERATIO,
-) = range(50)
+) = range(51)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 master_lock = threading.Semaphore(2)
@@ -211,6 +212,8 @@ class FetchLatestPosition(threading.Thread):
         self.needlev = False
         self.needtmode = False
         self.mute = False
+        self.muteerror = False
+        self.mutetrade = False
         self.lastPosTime = datetime.now() + timedelta(hours=8)
         if self.positions is None:
             self.positions = {}
@@ -456,7 +459,7 @@ class FetchLatestPosition(threading.Thread):
             master_lock.acquire()
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
-                if not self.mute:
+                if not self.muteerror:
                     tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
                     updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
                 self.error = 0
@@ -516,7 +519,7 @@ class FetchLatestPosition(threading.Thread):
                                 self.positions,
                                 self.take_profit_percent,
                                 self.stop_loss_percent,
-                                self.mute,
+                                self.mutetrade,
                             )
                             UserLocks[self.chat_id].release()
                 if self.num_no_data >= 3:
@@ -585,7 +588,7 @@ class FetchLatestPosition(threading.Thread):
                             self.positions,
                             self.take_profit_percent,
                             self.stop_loss_percent,
-                            self.mute,
+                            self.mutetrade,
                         )
                         UserLocks[self.chat_id].release()
             self.prev_df = output["data"]
@@ -2434,7 +2437,26 @@ def mute_choosetrader(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
-    CurrentUsers[update.message.chat_id].threads[idx].mute = True
+    context.user_data["idx"] = idx
+    update.message.reply_text(
+        "Please choose the mute option:\n1. Mute all trade notifications (order fulfilled msgs cannot be muted)\n2. Mute all position update notifications\n3. Mute all error messages\n4. Mute all\n(Enter 1,2,3,4)"
+    )
+    return MUTE3
+
+
+def mute_choosemode(update: Update, context: CallbackContext):
+    idx = context.user_data["idx"]
+    choice = int(update.message.text)
+    if choice == 1:
+        CurrentUsers[update.message.chat_id].threads[idx].mutetrade = True
+    elif choice == 2:
+        CurrentUsers[update.message.chat_id].threads[idx].mute = True
+    elif choice == 3:
+        CurrentUsers[update.message.chat_id].threads[idx].muteerror = True
+    else:
+        CurrentUsers[update.message.chat_id].threads[idx].muteerror = True
+        CurrentUsers[update.message.chat_id].threads[idx].mute = True
+        CurrentUsers[update.message.chat_id].threads[idx].mutetrade = True
     update.message.reply_text("Success!")
     return ConversationHandler.END
 
@@ -2471,6 +2493,8 @@ def unmute_choosetrader(update: Update, context: CallbackContext):
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
     CurrentUsers[update.message.chat_id].threads[idx].mute = False
+    CurrentUsers[update.message.chat_id].threads[idx].muteerror = False
+    CurrentUsers[update.message.chat_id].threads[idx].mutetrade = False
     update.message.reply_text("Success!")
     return ConversationHandler.END
 
@@ -3465,6 +3489,7 @@ def main() -> None:
         entry_points=[CommandHandler("mute", mute_trader)],
         states={
             MUTE1: [MessageHandler(Filters.text & ~Filters.command, mute_choosetrader)],
+            MUTE3: [MessageHandler(Filters.regex("^(1|2|3|4)$"), mute_choosemode)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
