@@ -2532,11 +2532,14 @@ def change_bnall(update: Update, context: CallbackContext):
     update.message.reply_text("Success!")
     return ConversationHandler.END
 
+
 def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
     CurrentUsers[update.message.chat_id].bclient.get_balance()
     return
+
+
 # class BybitClient:
 #     def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
 #         self.client = bybit.bybit(test=False, api_key=api_key, api_secret=api_secret)
@@ -4209,13 +4212,14 @@ class BinanceClient:
 
     def get_balance(self):
         try:
-            result = self.client.futures_account_balance()
+            result = self.client.futures_account()["assets"]
             for asset in result:
                 if asset["asset"] == "USDT":
-                    tosend = f"Your USDT account balance:\nBalance: {asset['balance']}\nUnrealized PNL: {asset['crossUnPnl']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
-                    updater.bot.sendMessage(chat_id=self.chat_id,text=tosend)
+                    tosend = f"Your USDT account balance:\nBalance: {asset['walletBalance']}\nUnrealized PNL: {asset['unrealizedProfit']}\nMargin balance: {asset['marginBalance']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
+                    updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
         except BinanceAPIException as e:
-            updater.bot.sendMessage(chat_id=self.chat_id,text=str(e))
+            updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
+
 
 class users:
     def __init__(
@@ -4385,7 +4389,6 @@ def restore_save_data():
                     x["profiles"][i]["positions"],
                 )
     return
-
 
 
 def main() -> None:
