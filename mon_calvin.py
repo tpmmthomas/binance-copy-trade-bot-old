@@ -1022,7 +1022,7 @@ def change_bnall(update: Update, context: CallbackContext):
 def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
-    current_users[update.message.chat_id].client.get_balance()
+    current_users[update.message.chat_id].get_balance()
     return
 
 
