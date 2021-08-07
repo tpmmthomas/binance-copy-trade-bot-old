@@ -157,7 +157,7 @@ class getStreamData(threading.Thread):
             isDiff, diff = self.compare(self.lastPositions, newPosition)
             if isDiff:
                 # logger.info("Yes")
-                process_newest_position(diff,newPosition)
+                process_newest_position(diff, newPosition)
             self.lastPositions = newPosition
 
     def compare(self, df, df2):
@@ -338,12 +338,16 @@ class getStreamData(threading.Thread):
         self.isStop.set()
 
 
-def process_newest_position(diff,df):
+def process_newest_position(diff, df):
     for chat_id in current_users:
         if df.empty:
-            updater.bot.sendMessage(chat_id=chat_id,text="The newest position:\nNo Position.")
+            updater.bot.sendMessage(
+                chat_id=chat_id, text="The newest position:\nNo Position."
+            )
         else:
-            updater.bot.sendMessage(chat_id=chat_id,text="The newest position:\n"+df.to_string())
+            updater.bot.sendMessage(
+                chat_id=chat_id, text="The newest position:\n" + df.to_string()
+            )
         tosend = (
             f"*The positions changed in Kevin's account:*\n" + diff.to_string() + "\n"
         )
@@ -1015,6 +1019,13 @@ def change_bnall(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+def check_balance(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+    current_users[update.message.chat_id].client.get_balance()
+    return
+
+
 class userClient:
     def __init__(
         self,
@@ -1648,6 +1659,16 @@ class userClient:
         # updater.bot.sendMessage(chat_id=self.chat_id,text="Successfully changed leverage mode!")
         return
 
+    def get_balance(self):
+        try:
+            result = self.client.futures_account()["assets"]
+            for asset in result:
+                if asset["asset"] == "USDT":
+                    tosend = f"Your USDT account balance:\nBalance: {asset['walletBalance']}\nUnrealized PNL: {asset['unrealizedProfit']}\nMargin balance: {asset['marginBalance']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
+                    updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+        except BinanceAPIException as e:
+            updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
+
 
 def restore_save_data():
     logger.info("Restored data")
@@ -1848,6 +1869,7 @@ def main():
     dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
+    dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     current_stream = getStreamData()
     current_stream.start()
     try:
