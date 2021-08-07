@@ -1492,7 +1492,7 @@ def automatic_reload():
             UserLocks[users].acquire()
             CurrentUsers[users].bclient.reload()
             UserLocks[users].release()
-            for traders in users.threads:
+            for traders in CurrentUsers[users].threads:
                 traders.reload()
             time.sleep(60)
         save_to_file(None, None)
