@@ -496,6 +496,7 @@ class FetchLatestPosition(threading.Thread):
             idx3 = x.find("No data")
             x = x[idx:idx2]
             if idx3 != -1:
+                self.nochange = 0
                 self.num_no_data += 1
                 if self.num_no_data > 29:
                     self.num_no_data = 4
