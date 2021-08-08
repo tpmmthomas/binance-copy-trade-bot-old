@@ -202,6 +202,7 @@ class FetchLatestPosition(threading.Thread):
         self.num_no_data = 0
         self.chat_id = chat_id
         self.name = name
+        self.nochange = 0
         self.uname = uname
         self.runtimes = 0
         self.driver = None
@@ -458,6 +459,7 @@ class FetchLatestPosition(threading.Thread):
         while not self.isStop.is_set():
             isChanged = False
             time.sleep(self.error * 5.5)
+            time.sleep((self.nochange // 5) * 5)
             master_lock.acquire()
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
@@ -495,7 +497,7 @@ class FetchLatestPosition(threading.Thread):
             x = x[idx:idx2]
             if idx3 != -1:
                 self.num_no_data += 1
-                if self.num_no_data > 21:
+                if self.num_no_data > 29:
                     self.num_no_data = 4
                 if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
                     now = datetime.now() + timedelta(hours=8)
@@ -563,6 +565,7 @@ class FetchLatestPosition(threading.Thread):
                 if not toComp.equals(prevdf):
                     isChanged = True
             if isChanged:
+                self.nochange = 0
                 now = datetime.now() + timedelta(hours=8)
                 self.lastPosTime = datetime.now() + timedelta(hours=8)
                 if not self.mute:
@@ -593,6 +596,11 @@ class FetchLatestPosition(threading.Thread):
                             self.mutetrade,
                         )
                         UserLocks[self.chat_id].release()
+            else:
+                if self.nochange < 30:
+                    self.nochange += 1
+                else:
+                    self.nochange = 0
             self.prev_df = output["data"]
             self.first_run = False
             self.runtimes += 1
