@@ -119,8 +119,12 @@ class getStreamData(threading.Thread):
             time.sleep(1.5)
             try:
                 result = self.client.futures_position_information()
-            except:
+            except BinanceAPIException as e:
                 logger.error("Cannot retrieve latest position.")
+                logger.error(str(e))
+                continue
+            except:
+                logger.error("Other errors")
                 continue
             symbol = []
             size = []
