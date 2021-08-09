@@ -460,7 +460,7 @@ class FetchLatestPosition(threading.Thread):
             isChanged = False
             time.sleep(self.error * 5.5)
             time.sleep((self.nochange // 5) * 5)
-            master_lock.acquire()
+            # master_lock.acquire()
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.muteerror:
@@ -474,7 +474,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     logger.error("Error here!")
-                    master_lock.release()
+                    # master_lock.release()
                     time.sleep(75)
                     continue
             else:
@@ -483,11 +483,11 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     logger.error("Error here 2!")
-                    master_lock.release()
+                    # master_lock.release()
                     time.sleep(75)
                     continue
             time.sleep(1)
-            master_lock.release()
+            # master_lock.release()
             time.sleep(3)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
             x = soup.get_text()
@@ -600,7 +600,7 @@ class FetchLatestPosition(threading.Thread):
                         )
                         UserLocks[self.chat_id].release()
             else:
-                if self.nochange < 45:
+                if self.nochange < 40:
                     self.nochange += 1
                 else:
                     self.nochange = 0
@@ -612,7 +612,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            sleeptime = random.randint(35, 70)
+            sleeptime = random.randint(40, 85)
             time.sleep(sleeptime)
         if self.driver is not None:
             self.driver.quit()
