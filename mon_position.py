@@ -598,7 +598,7 @@ class FetchLatestPosition(threading.Thread):
                         )
                         UserLocks[self.chat_id].release()
             else:
-                if self.nochange < 30:
+                if self.nochange < 20:
                     self.nochange += 1
                 else:
                     self.nochange = 0

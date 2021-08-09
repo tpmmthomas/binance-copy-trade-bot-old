@@ -121,7 +121,7 @@ class getStreamData(threading.Thread):
                 result = self.client.futures_position_information()
             except:
                 logger.error("Cannot retrieve latest position.")
-                return
+                continue
             symbol = []
             size = []
             EnPrice = []
