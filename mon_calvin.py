@@ -159,7 +159,7 @@ class getStreamData(threading.Thread):
                 }
             )
             isDiff, diff = self.compare(self.lastPositions, newPosition)
-            if isDiff:
+            if isDiff and not diff.empty:
                 # logger.info("Yes")
                 process_newest_position(diff, newPosition)
             self.lastPositions = newPosition
@@ -167,8 +167,8 @@ class getStreamData(threading.Thread):
     def compare(self, df, df2):
         if df is None or df2 is None:
             return False, None
-        toComp = df[["symbol", "size", "Entry Price"]]
-        toComp2 = df2[["symbol", "size", "Entry Price"]]
+        toComp = df[["symbol", "size"]]
+        toComp2 = df2[["symbol", "size"]]
         if toComp.equals(toComp2):
             return False, None
         txtype = []
