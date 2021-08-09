@@ -473,6 +473,7 @@ class FetchLatestPosition(threading.Thread):
                     self.driver.get(self.fetch_url)
                 except:
                     self.error += 1
+                    logger.error("Error here!")
                     master_lock.release()
                     time.sleep(75)
                     continue
@@ -481,6 +482,7 @@ class FetchLatestPosition(threading.Thread):
                     self.driver.refresh()
                 except:
                     self.error += 1
+                    logger.error("Error here 2!")
                     master_lock.release()
                     time.sleep(75)
                     continue
@@ -531,7 +533,7 @@ class FetchLatestPosition(threading.Thread):
                     self.prev_df = "x"
                     self.first_run = False
                 self.runtimes += 1
-                if self.runtimes >= 10:
+                if self.runtimes >= 20:
                     self.runtimes = 0
                     self.driver.quit()
                     self.driver = None
@@ -598,19 +600,19 @@ class FetchLatestPosition(threading.Thread):
                         )
                         UserLocks[self.chat_id].release()
             else:
-                if self.nochange < 20:
+                if self.nochange < 45:
                     self.nochange += 1
                 else:
                     self.nochange = 0
             self.prev_df = output["data"]
             self.first_run = False
             self.runtimes += 1
-            if self.runtimes >= 10:
+            if self.runtimes >= 20:
                 self.runtimes = 0
                 self.driver.quit()
                 self.driver = None
             self.error = 0
-            sleeptime = random.randint(45, 59)
+            sleeptime = random.randint(35, 70)
             time.sleep(sleeptime)
         if self.driver is not None:
             self.driver.quit()
