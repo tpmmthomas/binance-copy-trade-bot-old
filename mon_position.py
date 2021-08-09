@@ -460,7 +460,7 @@ class FetchLatestPosition(threading.Thread):
             isChanged = False
             time.sleep(self.error * 5.5)
             time.sleep((self.nochange // 5) * 5)
-            # master_lock.acquire()
+            master_lock.acquire()
             if self.error >= 30:
                 logger.info(f"{self.uname}: Error found in trader {self.name}.")
                 if not self.muteerror:
@@ -474,7 +474,7 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     logger.error("Error here!")
-                    # master_lock.release()
+                    master_lock.release()
                     time.sleep(75)
                     continue
             else:
@@ -483,11 +483,11 @@ class FetchLatestPosition(threading.Thread):
                 except:
                     self.error += 1
                     logger.error("Error here 2!")
-                    # master_lock.release()
+                    master_lock.release()
                     time.sleep(75)
                     continue
             time.sleep(1)
-            # master_lock.release()
+            master_lock.release()
             time.sleep(3)
             soup = BeautifulSoup(self.driver.page_source, features="html.parser")
             x = soup.get_text()
@@ -3672,6 +3672,7 @@ class BinanceClient:
         self.ticksize = {}
         self.safety_ratio = safety_ratio
         info = self.client.futures_exchange_info()
+        self.isReloaded = False
         try:
             self.client.futures_change_position_mode(dualSidePosition=True)
         except BinanceAPIException as e:
@@ -4013,7 +4014,10 @@ class BinanceClient:
         stopLoss,
         mute,
     ):
-        self.reload()
+        try:
+            self.reload()
+        except:
+            time.sleep(10)
         logger.info("DEBUG\n" + df.to_string())
         df = df.values
         for tradeinfo in df:
@@ -4197,18 +4201,25 @@ class BinanceClient:
                     updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
 
     def reload(self):
-        info = self.client.futures_exchange_info()
-        secondticksize = {}
-        secondstepsize = {}
-        for thing in info["symbols"]:
-            secondticksize[thing["symbol"]] = round(
-                -math.log(float(thing["filters"][0]["tickSize"]), 10)
-            )
-            secondstepsize[thing["symbol"]] = round(
-                -math.log(float(thing["filters"][1]["stepSize"]), 10)
-            )
-        self.ticksize = secondticksize
-        self.stepsize = secondstepsize
+        if not self.isReloaded:
+            info = self.client.futures_exchange_info()
+            secondticksize = {}
+            secondstepsize = {}
+            for thing in info["symbols"]:
+                secondticksize[thing["symbol"]] = round(
+                    -math.log(float(thing["filters"][0]["tickSize"]), 10)
+                )
+                secondstepsize[thing["symbol"]] = round(
+                    -math.log(float(thing["filters"][1]["stepSize"]), 10)
+                )
+            self.ticksize = secondticksize
+            self.stepsize = secondstepsize
+            self.isReloaded = True
+            t1 = threading.Thread(target=self.reset_reload)
+
+    def reset_reload(self):
+        time.sleep(30)
+        self.isReloaded = False
 
     def change_safety_ratio(self, safety_ratio):
         logger.info(f"{self.uname} changed safety ratio.")
