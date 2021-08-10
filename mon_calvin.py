@@ -116,7 +116,7 @@ class getStreamData(threading.Thread):
 
     def run(self):
         while True:
-            time.sleep(1.5)
+            time.sleep(4)
             try:
                 result = self.client.futures_position_information()
             except BinanceAPIException as e:
