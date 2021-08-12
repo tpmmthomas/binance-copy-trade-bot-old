@@ -658,7 +658,7 @@ class FetchLatestPosition(threading.Thread):
         if self.prev_df is not None:
             if isinstance(self.prev_df, str):
                 return "No positions."
-            return self.prev_df.to_string()
+            return self.prev_df
         else:
             return "Error."
 
@@ -1439,11 +1439,16 @@ def view_traderInfo(update: Update, context: CallbackContext):
         f"{update.message.text}'s current position: \n(Last position update: {str(user.threads[idx].lastPosTime)})"
     )
     msg = user.threads[idx].get_info()
-    if len(msg) > 500:
-        update.message.reply_text(f"{msg[:500]}")
-        update.message.reply_text(f"{msg[500:]}")
-    else:
+    if isinstance(msg, str):
         update.message.reply_text(f"{msg}")
+    else:
+        if msg.shape[0] <= 10:
+            update.message.reply_text(f"{msg}")
+        else:
+            a = msg.iloc[0:10]
+            update.message.reply_text(f"{a.to_string()+'\n(cont...)'}")
+            b = msg.iloc[10:]
+            update.message.reply_text(f"{b.to_string()}")
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
 
