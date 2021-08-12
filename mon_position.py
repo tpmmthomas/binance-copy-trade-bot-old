@@ -1443,7 +1443,7 @@ def view_traderInfo(update: Update, context: CallbackContext):
         update.message.reply_text(f"{msg}")
     else:
         if msg.shape[0] <= 10:
-            update.message.reply_text(f"{msg}")
+            update.message.reply_text(f"{msg.to_string()}")
         else:
             a = msg.iloc[0:10]
             ttt = a.to_string() + "\n(cont...)"
