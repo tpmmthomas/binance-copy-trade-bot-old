@@ -1446,7 +1446,8 @@ def view_traderInfo(update: Update, context: CallbackContext):
             update.message.reply_text(f"{msg}")
         else:
             a = msg.iloc[0:10]
-            update.message.reply_text(f"{a.to_string()+'\n(cont...)'}")
+            ttt = a.to_string() + "\n(cont...)"
+            update.message.reply_text(f"{ttt}")
             b = msg.iloc[10:]
             update.message.reply_text(f"{b.to_string()}")
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
