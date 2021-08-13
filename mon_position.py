@@ -3622,6 +3622,13 @@ class BybitClient:
                         updater.bot.sendMessage(
                             chat_id=self.chat_id, text=f"Error: {response['ret_msg']}"
                         )
+                        retmsg = response["ret_msg"]
+                        if retmsg.find("reduce-only") != -1:
+                            positionKey = tradeinfo[1] + positionSide
+                            idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                            CurrentUsers[self.chat_id].threads[idx].positions[
+                                positionKey
+                            ] = 0
                         continue
                     positionKey = tradeinfo[1] + positionSide
                     print(response["result"]["order_id"])
