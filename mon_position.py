@@ -1163,7 +1163,6 @@ def trade_confirm(update: Update, context: CallbackContext):
                     -1,
                     -1,
                     -1,
-                    context.user_data["platform"],
                 ),
             )
             t1.start()
