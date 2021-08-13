@@ -695,6 +695,7 @@ class FetchLatestPosition(threading.Thread):
         self.stop_loss_percent = secondsl
 
     def change_proportion(self, symbol, prop):
+        self.reload()
         if symbol not in self.proportion:
             updater.bot.sendMessage(
                 chat_id=self.chat_id,
@@ -719,6 +720,7 @@ class FetchLatestPosition(threading.Thread):
         return self.proportion[symbol]
 
     def change_all_proportion(self, prop):
+        self.reload()
         for symbol in self.proportion:
             self.proportion[symbol] = prop
         logger.info(f"{self.uname} Successfully changed all proportion.")
@@ -4159,7 +4161,7 @@ class BinanceClient:
             if not tradeinfo[1] in proportion:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol.",
+                    text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol. If this is a new symbol, set your proportions first.",
                 )
                 continue
             quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
