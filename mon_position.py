@@ -3182,11 +3182,11 @@ class BybitClient:
                 )
         for symbol in self.ticksize:
             self.client.LinearPositions.LinearPositions_switchIsolated(
-                symbol=symbol, is_isolated=False, buy_leverage=50, sell_leverage=50
-            )
+                symbol=symbol, is_isolated=False, buy_leverage=20, sell_leverage=20
+            ).result()
             self.client.LinearPositions.LinearPositions_switchMode(
                 symbol=symbol, tp_sl_mode="Partial"
-            )
+            ).result()
 
     def get_symbols(self):
         symbolList = []
@@ -3457,7 +3457,7 @@ class BybitClient:
                 )
                 self.client.LinearOrder.LinearOrder_cancel(
                     symbol=symbol, order_id=orderId
-                )
+                ).result()
             except:
                 pass
 
@@ -3469,7 +3469,7 @@ class BybitClient:
             try:
                 self.client.LinearOrder.LinearOrder_cancel(
                     symbol=symbol, order_id=orderId
-                )
+                ).result()
             except:
                 pass
 
@@ -3527,7 +3527,7 @@ class BybitClient:
                             symbol=tradeinfo[1],
                             buy_leverage=str(leverage[tradeinfo[1]]),
                             sell_leverage=str(leverage[tradeinfo[1]]),
-                        )
+                        ).result()
                     except:
                         pass
             else:
@@ -3595,19 +3595,33 @@ class BybitClient:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                    response = self.client.LinearOrder.LinearOrder_new(
-                        side=side,
-                        symbol=tradeinfo[1],
-                        order_type="Market",
-                        qty=quant,
-                        time_in_force="GoodTillCancel",
-                        reduce_only=False,
-                        close_on_trigger=False,
-                    ).result()[0]
+                    if isOpen:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Market",
+                            qty=quant,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=False,
+                            close_on_trigger=False,
+                        ).result()[0]
+                    else:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Market",
+                            qty=quant,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=True,
+                            close_on_trigger=True,
+                        ).result()[0]
                     if response["ret_msg"] == "OK":
                         logger.info(f"{self.uname} opened order.")
                     else:
                         logger.error(f"Error: {response['ret_msg']}")
+                        updater.bot.sendMessage(
+                            chat_id=self.chat_id, text=f"Error: {response['ret_msg']}"
+                        )
                         continue
                     positionKey = tradeinfo[1] + positionSide
                     print(response["result"]["order_id"])
@@ -3641,16 +3655,28 @@ class BybitClient:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                    response = self.client.LinearOrder.LinearOrder_new(
-                        side=side,
-                        symbol=tradeinfo[1],
-                        order_type="Limit",
-                        qty=quant,
-                        price=target_price,
-                        time_in_force="GoodTillCancel",
-                        reduce_only=False,
-                        close_on_trigger=False,
-                    ).result()[0]
+                    if isOpen:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Limit",
+                            qty=quant,
+                            price=target_price,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=False,
+                            close_on_trigger=False,
+                        ).result()[0]
+                    else:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Limit",
+                            qty=quant,
+                            price=target_price,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=True,
+                            close_on_trigger=True,
+                        ).result()[0]
                     if response["ret_msg"] == "OK":
                         logger.info(f"{self.uname} opened order.")
                     else:
@@ -4295,9 +4321,6 @@ class BinanceClient:
         )
         return
 
-    def change_keys(self, apikey, apisecret):
-        self.client = Client(apikey, apisecret)  # d
-
     def get_balance(self):
         try:
             result = self.client.futures_account()["assets"]
@@ -4464,7 +4487,7 @@ def restore_save_data():
                 x["safety_ratrio"],
                 api_key=x["api_key"],
                 api_secret=x["api_secret"],
-                tplatform=3,  # x["platform"],
+                tplatform=x["platform"],
             )
         else:
             CurrentUsers[x["chat_id"]] = users(
@@ -4473,7 +4496,7 @@ def restore_save_data():
                 x["safety_ratrio"],
                 api_key=x["api_key"],
                 api_secret=x["api_secret"],
-                tplatform=3,  # x["platform"],
+                tplatform=x["platform"],
             )
         for i in range(0, len(x["profiles"])):
             time.sleep(4)
