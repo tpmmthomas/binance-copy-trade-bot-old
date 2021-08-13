@@ -4252,6 +4252,31 @@ class BinanceClient:
                         CurrentUsers[self.chat_id].threads[idx].positions[
                             positionKey
                         ] = 0
+                        res = self.client.futures_position_information(
+                            symbol=tradeinfo[1]
+                        )
+                        for pos in res:
+                            if (
+                                pos["positionSide"] == positionSide
+                                and float(pos["positionAmt"]) == 0
+                            ):
+                                if positionKey in CurrentUsers[self.chat_id].tpslids:
+                                    idlist = CurrentUsers[self.chat_id].tpslids[
+                                        positionKey
+                                    ]
+                                    try:
+                                        for id in idlist:
+                                            self.client.futures_cancel_order(
+                                                symbol=tradeinfo[1], orderId=id
+                                            )
+                                        logger.info(
+                                            f"{tradeinfo[1]} tpsl order cancelled!"
+                                        )
+                                        CurrentUsers[self.chat_id].tpslids[
+                                            positionKey
+                                        ] = []
+                                    except BinanceAPIException as e:
+                                        logger.error(str(e))
                     updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
             else:
                 try:
