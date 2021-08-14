@@ -1570,7 +1570,7 @@ def save_to_file(update: Update, context: CallbackContext):
 
 def automatic_reload():
     while True:
-        time.sleep(60 * 60 * 24)
+        time.sleep(60 * 60 * 3)
         for users in CurrentUsers:
             UserLocks[users].acquire()
             CurrentUsers[users].bclient.reload()
@@ -4280,8 +4280,8 @@ class BinanceClient:
                                         CurrentUsers[self.chat_id].tpslids[
                                             positionKey
                                         ] = []
-                                    except BinanceAPIException as e:
-                                        logger.error(str(e))
+                                    except BinanceAPIException as e2:
+                                        logger.error(str(e2))
             else:
                 try:
                     target_price = float(target_price)
