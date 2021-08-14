@@ -476,63 +476,150 @@ class FetchLatestPosition(threading.Thread):
     def run(self):
         logger.info("%s starting %s", self.uname, self.name)
         while not self.isStop.is_set():
-            isChanged = False
-            time.sleep(self.error * 5.5)
-            time.sleep((self.nochange // 5) * 5)
-            master_lock.acquire()
-            if self.error >= 30:
-                logger.info(f"{self.uname}: Error found in trader {self.name}.")
-                if not self.muteerror:
-                    tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                self.error = 0
-            if self.driver is None:
+            try:
+                isChanged = False
+                time.sleep(self.error * 5.5)
+                time.sleep((self.nochange // 5) * 5)
+                master_lock.acquire()
+                if self.error >= 30:
+                    logger.info(f"{self.uname}: Error found in trader {self.name}.")
+                    if not self.muteerror:
+                        tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
+                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                    self.error = 0
+                if self.driver is None:
+                    try:
+                        self.driver = webdriver.Chrome(
+                            cfg.driver_location, options=options
+                        )
+                        self.driver.get(self.fetch_url)
+                    except:
+                        self.error += 1
+                        logger.error("Error here!")
+                        master_lock.release()
+                        time.sleep(75)
+                        continue
+                else:
+                    try:
+                        self.driver.refresh()
+                    except:
+                        self.error += 1
+                        logger.error("Error here 2!")
+                        master_lock.release()
+                        time.sleep(75)
+                        continue
+                time.sleep(1)
+                master_lock.release()
+                time.sleep(5)
+                soup = BeautifulSoup(self.driver.page_source, features="html.parser")
+                x = soup.get_text()
+                ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
+                x = x.split("\n")[4]
+                idx = x.find("Position")
+                idx2 = x.find("Start")
+                idx3 = x.find("No data")
+                x = x[idx:idx2]
+                if idx3 != -1:
+                    self.nochange = 0
+                    self.num_no_data += 1
+                    if self.num_no_data > 29:
+                        self.num_no_data = 4
+                    if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
+                        now = datetime.now() + timedelta(hours=8)
+                        self.lastPosTime = datetime.now() + timedelta(hours=8)
+                        if not self.mute:
+                            tosend = (
+                                f"Trader {self.name}, Current time: "
+                                + str(now)
+                                + "\nNo positions.\n"
+                            )
+                            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                        if not self.first_run:
+                            txlist = self.changes(self.prev_df, "x")
+                            if self.toTrade:
+                                UserLocks[self.chat_id].acquire()
+                                CurrentUsers[self.chat_id].bclient.open_trade(
+                                    txlist,
+                                    self.name,
+                                    self.proportion,
+                                    self.leverage,
+                                    self.lmode,
+                                    self.tmodes,
+                                    self.positions,
+                                    self.take_profit_percent,
+                                    self.stop_loss_percent,
+                                    self.mutetrade,
+                                )
+                                UserLocks[self.chat_id].release()
+                    if self.num_no_data >= 3:
+                        self.prev_df = "x"
+                        self.first_run = False
+                    self.driver.quit()
+                    self.driver = None
+                    time.sleep(5 * self.num_no_data)
+                    continue
+                else:
+                    self.num_no_data = 0
+                #######################################################################
                 try:
-                    self.driver = webdriver.Chrome(cfg.driver_location, options=options)
-                    self.driver.get(self.fetch_url)
+                    output, calmargin = format_results(x, self.driver.page_source)
                 except:
                     self.error += 1
-                    logger.error("Error here!")
-                    master_lock.release()
-                    time.sleep(75)
                     continue
-            else:
-                try:
-                    self.driver.refresh()
-                except:
+                if output["data"].empty:
                     self.error += 1
-                    logger.error("Error here 2!")
-                    master_lock.release()
-                    time.sleep(75)
                     continue
-            time.sleep(1)
-            master_lock.release()
-            time.sleep(5)
-            soup = BeautifulSoup(self.driver.page_source, features="html.parser")
-            x = soup.get_text()
-            ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
-            x = x.split("\n")[4]
-            idx = x.find("Position")
-            idx2 = x.find("Start")
-            idx3 = x.find("No data")
-            x = x[idx:idx2]
-            if idx3 != -1:
-                self.nochange = 0
-                self.num_no_data += 1
-                if self.num_no_data > 29:
-                    self.num_no_data = 4
-                if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
+                if self.toTrade and self.lmode == 0:
+                    symbols = output["data"]["symbol"].values
+                    margins = output["data"]["Estimated Margin"].values
+                    for i, mask in enumerate(calmargin):
+                        if mask:
+                            self.leverage[symbols[i]] = int(margins[i][:-1])
+                if self.prev_df is None or isinstance(self.prev_df, str):
+                    isChanged = True
+                else:
+                    try:
+                        toComp = output["data"][["symbol", "size", "Entry Price"]]
+                        prevdf = self.prev_df[["symbol", "size", "Entry Price"]]
+                    except:
+                        self.error += 1
+                        continue
+                    if not toComp.equals(prevdf):
+                        isChanged = True
+                if isChanged:
+                    self.nochange = 0
                     now = datetime.now() + timedelta(hours=8)
                     self.lastPosTime = datetime.now() + timedelta(hours=8)
                     if not self.mute:
-                        tosend = (
-                            f"Trader {self.name}, Current time: "
-                            + str(now)
-                            + "\nNo positions.\n"
-                        )
-                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                        if output["data"].shape[0] <= 10:
+                            tosend = (
+                                f"Trader {self.name}, Current time: "
+                                + str(now)
+                                + "\n"
+                                + output["time"]
+                                + "\n"
+                                + output["data"].to_string()
+                                + "\n"
+                            )
+                            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                        else:
+                            firstdf = output["data"].iloc[0:10]
+                            tosend = (
+                                f"Trader {self.name}, Current time: "
+                                + str(now)
+                                + "\n"
+                                + output["time"]
+                                + "\n"
+                                + firstdf.to_string()
+                                + "\n(cont...)"
+                            )
+                            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                            seconddf = output["data"].iloc[10:]
+                            updater.bot.sendMessage(
+                                chat_id=self.chat_id, text=seconddf.to_string()
+                            )
                     if not self.first_run:
-                        txlist = self.changes(self.prev_df, "x")
+                        txlist = self.changes(self.prev_df, output["data"])
                         if self.toTrade:
                             UserLocks[self.chat_id].acquire()
                             CurrentUsers[self.chat_id].bclient.open_trade(
@@ -548,102 +635,20 @@ class FetchLatestPosition(threading.Thread):
                                 self.mutetrade,
                             )
                             UserLocks[self.chat_id].release()
-                if self.num_no_data >= 3:
-                    self.prev_df = "x"
-                    self.first_run = False
+                else:
+                    if self.nochange < 30:
+                        self.nochange += 1
+                    else:
+                        self.nochange = 0
+                self.prev_df = output["data"]
+                self.first_run = False
                 self.driver.quit()
                 self.driver = None
-                time.sleep(5 * self.num_no_data)
-                continue
-            else:
-                self.num_no_data = 0
-            #######################################################################
-            try:
-                output, calmargin = format_results(x, self.driver.page_source)
+                self.error = 0
+                sleeptime = random.randint(46, 70)
+                time.sleep(sleeptime)
             except:
-                self.error += 1
-                continue
-            if output["data"].empty:
-                self.error += 1
-                continue
-            if self.toTrade and self.lmode == 0:
-                symbols = output["data"]["symbol"].values
-                margins = output["data"]["Estimated Margin"].values
-                for i, mask in enumerate(calmargin):
-                    if mask:
-                        self.leverage[symbols[i]] = int(margins[i][:-1])
-            if self.prev_df is None or isinstance(self.prev_df, str):
-                isChanged = True
-            else:
-                try:
-                    toComp = output["data"][["symbol", "size", "Entry Price"]]
-                    prevdf = self.prev_df[["symbol", "size", "Entry Price"]]
-                except:
-                    self.error += 1
-                    continue
-                if not toComp.equals(prevdf):
-                    isChanged = True
-            if isChanged:
-                self.nochange = 0
-                now = datetime.now() + timedelta(hours=8)
-                self.lastPosTime = datetime.now() + timedelta(hours=8)
-                if not self.mute:
-                    if output["data"].shape[0] <= 10:
-                        tosend = (
-                            f"Trader {self.name}, Current time: "
-                            + str(now)
-                            + "\n"
-                            + output["time"]
-                            + "\n"
-                            + output["data"].to_string()
-                            + "\n"
-                        )
-                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                    else:
-                        firstdf = output["data"].iloc[0:10]
-                        tosend = (
-                            f"Trader {self.name}, Current time: "
-                            + str(now)
-                            + "\n"
-                            + output["time"]
-                            + "\n"
-                            + firstdf.to_string()
-                            + "\n(cont...)"
-                        )
-                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                        seconddf = output["data"].iloc[10:]
-                        updater.bot.sendMessage(
-                            chat_id=self.chat_id, text=seconddf.to_string()
-                        )
-                if not self.first_run:
-                    txlist = self.changes(self.prev_df, output["data"])
-                    if self.toTrade:
-                        UserLocks[self.chat_id].acquire()
-                        CurrentUsers[self.chat_id].bclient.open_trade(
-                            txlist,
-                            self.name,
-                            self.proportion,
-                            self.leverage,
-                            self.lmode,
-                            self.tmodes,
-                            self.positions,
-                            self.take_profit_percent,
-                            self.stop_loss_percent,
-                            self.mutetrade,
-                        )
-                        UserLocks[self.chat_id].release()
-            else:
-                if self.nochange < 30:
-                    self.nochange += 1
-                else:
-                    self.nochange = 0
-            self.prev_df = output["data"]
-            self.first_run = False
-            self.driver.quit()
-            self.driver = None
-            self.error = 0
-            sleeptime = random.randint(46, 70)
-            time.sleep(sleeptime)
+                pass
         if self.driver is not None:
             self.driver.quit()
         updater.bot.sendMessage(
@@ -4245,6 +4250,7 @@ class BinanceClient:
                     t1.start()
                 except BinanceAPIException as e:
                     logger.error(e)
+                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
                     if not isOpen and str(e).find("2022") >= 0:
                         positionKey = tradeinfo[1] + positionSide
                         idx = CurrentUsers[self.chat_id].trader_names.index(uname)
@@ -4276,7 +4282,6 @@ class BinanceClient:
                                         ] = []
                                     except BinanceAPIException as e:
                                         logger.error(str(e))
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
             else:
                 try:
                     target_price = float(target_price)
