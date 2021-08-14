@@ -1455,16 +1455,14 @@ def view_traderInfo(update: Update, context: CallbackContext):
     else:
         numrows = msg.shape[0]
         if numrows <= 10:
-            updater.message.reply_text(f"{msg.to_string()}")
+            update.message.reply_text(f"{msg.to_string()}")
         else:
             firstdf = msg.iloc[0:10]
             tosend = firstdf.to_string() + "\n(cont...)"
-            updater.message.reply_text(f"{tosend}")
+            update.message.reply_text(f"{tosend}")
             for i in range(numrows // 10):
-                seconddf = msg.iloc[
-                    (i + 1) * 10 : min(numrows, (i + 2) * 10)
-                ]
-                updater.message.reply_text(f"{seconddf.to_string()}")
+                seconddf = msg.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
+                update.message.reply_text(f"{seconddf.to_string()}")
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
 
