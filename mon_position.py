@@ -591,7 +591,8 @@ class FetchLatestPosition(threading.Thread):
                     now = datetime.now() + timedelta(hours=8)
                     self.lastPosTime = datetime.now() + timedelta(hours=8)
                     if not self.mute:
-                        if output["data"].shape[0] <= 10:
+                        numrows = output["data"].shape[0]
+                        if numrows <= 10:
                             tosend = (
                                 f"Trader {self.name}, Current time: "
                                 + str(now)
@@ -614,10 +615,13 @@ class FetchLatestPosition(threading.Thread):
                                 + "\n(cont...)"
                             )
                             updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                            seconddf = output["data"].iloc[10:]
-                            updater.bot.sendMessage(
-                                chat_id=self.chat_id, text=seconddf.to_string()
-                            )
+                            for i in range(numrows // 10):
+                                seconddf = output["data"].iloc[
+                                    (i + 1) * 10 : min(numrows, (i + 2) * 10)
+                                ]
+                                updater.bot.sendMessage(
+                                    chat_id=self.chat_id, text=seconddf.to_string()
+                                )
                     if not self.first_run:
                         txlist = self.changes(self.prev_df, output["data"])
                         if self.toTrade:
@@ -648,6 +652,7 @@ class FetchLatestPosition(threading.Thread):
                 sleeptime = random.randint(46, 70)
                 time.sleep(sleeptime)
             except:
+                logger.error("Some uncaught error! Oh no.")
                 pass
         if self.driver is not None:
             self.driver.quit()
@@ -1448,14 +1453,18 @@ def view_traderInfo(update: Update, context: CallbackContext):
     if isinstance(msg, str):
         update.message.reply_text(f"{msg}")
     else:
-        if msg.shape[0] <= 10:
-            update.message.reply_text(f"{msg.to_string()}")
+        numrows = msg.shape[0]
+        if numrows <= 10:
+            updater.message.reply_text(f"{msg.to_string()}")
         else:
-            a = msg.iloc[0:10]
-            ttt = a.to_string() + "\n(cont...)"
-            update.message.reply_text(f"{ttt}")
-            b = msg.iloc[10:]
-            update.message.reply_text(f"{b.to_string()}")
+            firstdf = msg.iloc[0:10]
+            tosend = firstdf.to_string() + "\n(cont...)"
+            updater.message.reply_text(f"{tosend}")
+            for i in range(numrows // 10):
+                seconddf = msg.iloc[
+                    (i + 1) * 10 : min(numrows, (i + 2) * 10)
+                ]
+                updater.message.reply_text(f"{seconddf.to_string()}")
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
 
