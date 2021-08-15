@@ -24,6 +24,8 @@ from telegram.ext import (
     CallbackContext,
 )
 import json
+import bybit
+import hmac, hashlib, time, requests
 
 q = queue.Queue(200)
 logging.basicConfig(
@@ -81,7 +83,9 @@ logging.basicConfig(
     PROPSYM2,
     REALSETPROP3,
     SAFERATIO,
-) = range(51)
+    SEP3,
+    CP1,
+) = range(53)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
@@ -991,11 +995,25 @@ def getTpslReal(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
-def change_api(update: Update, context: CallbackContext):
+def choose_platform(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
-    update.message.reply_text("Please provide your API Key from Binance.")
+    update.message.reply_text(
+        "Please choose the platform:\n1. AAX\n2. Bybit\n3.Binance\nPlease enter your choice (1,2,3)"
+    )
+    return SEP3
+
+
+def change_api(update: Update, context: CallbackContext):
+    platform = int(update.message.text)
+    context.user_data["platform"] = platform
+    if platform == 3:
+        update.message.reply_text("Please provide your API Key from Binance.")
+    elif platform == 2:
+        update.message.reply_text("Please provide your API Key from Bybit.")
+    else:
+        update.message.reply_text("Please provide your API Key from AAX.")
     update.message.reply_text(
         "*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",
         parse_mode=telegram.ParseMode.MARKDOWN,
@@ -1006,6 +1024,9 @@ def change_api(update: Update, context: CallbackContext):
 def change_secret(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} changing api keys.")
+    if not update.message.text.isalnum():
+        update.message.reply_text("Your API key is invalid, please enter again.")
+        return SEP1
     update.message.reply_text(
         "Please provide your Secret Key.\n*DELETE YOUR MESSAGE IMMEDIATELY AFTERWARDS.*",
         parse_mode=telegram.ParseMode.MARKDOWN,
@@ -1015,19 +1036,71 @@ def change_secret(update: Update, context: CallbackContext):
 
 
 def change_bnall(update: Update, context: CallbackContext):
+    if not update.message.text.isalnum():
+        update.message.reply_text("Your secret key is invalid, please enter again.")
+        return SEP2
     user = current_users[update.message.chat_id]
     user.api_key = context.user_data["api_key"]
     user.api_secret = update.message.text
-    user.client = Client(user.api_key, user.api_secret)
-    update.message.reply_text("Success!")
+    if context.user_data["platform"] == 1:
+        user.client = AAXClient(
+            user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
+        )
+    elif context.user_data["platform"] == 2:
+        user.client = BybitClient(
+            user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
+        )
+    else:
+        user.client = BinanceClient(
+            user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
+        )
+    user.reload()
+    user.tplatform = context.user_data["platform"]
+    update.message.reply_text(
+        "Success! If you changed platforms, your proportions and leverages might be reset. Please change them back accordingly."
+    )
     return ConversationHandler.END
 
 
 def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
-    current_users[update.message.chat_id].get_balance()
+    current_users[update.message.chat_id].client.get_balance()
     return
+
+
+def close_position(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    user = current_users[update.message.chat_id]
+    listsymbols = user.client.get_symbols()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text(
+        "Please choose the symbol to close.",
+        reply_markup=ReplyKeyboardMarkup(
+            listsymbols, one_time_keyboard=True, input_field_placeholder="Which Symbol?"
+        ),
+    )
+    return CP1
+
+
+def conf_symbol(update: Update, context: CallbackContext):
+    user = current_users[update.message.chat_id]
+    listsymbols = user.bclient.get_symbols()
+    if not update.message.text in listsymbols:
+        listsymbols = [[x] for x in listsymbols]
+        update.message.reply_text(
+            "Your symbol is not valid! Please choose again.",
+            reply_markup=ReplyKeyboardMarkup(
+                listsymbols,
+                one_time_keyboard=True,
+                input_field_placeholder="Which Symbol?",
+            ),
+        )
+        return CP1
+    user.client.close_position(update.message.text)
+    return ConversationHandler.END
 
 
 class userClient:
@@ -1044,37 +1117,25 @@ class userClient:
         tp=-1,
         sl=-1,
         lmode=0,
+        tplatform=3,
     ):
         self.chat_id = chat_id
         self.uname = uname
         self.name = "CalvinTsai"
         self.api_key = api_key
         self.api_secret = api_secret
-        self.client = Client(api_key, api_secret)
-        self.stepsize = {}
-        self.ticksize = {}
+        self.tplatform = tplatform
+        if self.tplatform == 1:
+            self.client = AAXClient(chat_id, uname, safety_ratio, api_key, api_secret)
+        elif self.tplatform == 2:
+            self.client = BybitClient(chat_id, uname, safety_ratio, api_key, api_secret)
+        else:
+            self.client = BinanceClient(
+                chat_id, uname, safety_ratio, api_key, api_secret
+            )
         self.tpslids = {}
         # self.unfulfilledPos = {}  # Map Kevin's Client ID to own orderId
         self.safety_ratio = safety_ratio
-        info = self.client.futures_exchange_info()
-        try:
-            self.client.futures_change_position_mode(dualSidePosition=True)
-        except BinanceAPIException as e:
-            logger.error(e)
-        for thing in info["symbols"]:
-            self.ticksize[thing["symbol"]] = round(
-                -math.log(float(thing["filters"][0]["tickSize"]), 10)
-            )
-            self.stepsize[thing["symbol"]] = round(
-                -math.log(float(thing["filters"][1]["stepSize"]), 10)
-            )
-        try:
-            for symbol in self.ticksize:
-                self.client.futures_change_margin_type(
-                    symbol=symbol, marginType="CROSSED"
-                )
-        except BinanceAPIException as e:
-            logger.error(e)
         self.positions = positions
         self.tmodes = {}
         self.lmode = lmode
@@ -1114,394 +1175,53 @@ class userClient:
                 self.stop_loss_percent[symbol] = sl
 
     def get_symbols(self):
-        symbolList = []
-        for symbol in self.stepsize:
-            symbolList.append(symbol)
-        return symbolList
-
-    def tpsl_trade(
-        self, symbol, side, positionSide, qty, excprice, leverage, tp, sl
-    ):  # make sure everything in numbers not text//side: original side
-        side = "BUY" if side == "SELL" else "SELL"
-        logger.info(f"Debug Check {leverage}/{tp}/{sl}")
-        if positionSide == "LONG":
-            if tp != -1:
-                tpPrice1 = excprice * (1 + (tp / leverage) / 100)
-                qty1 = "{:0.0{}f}".format(qty, self.stepsize[symbol])
-                tpPrice1 = "{:0.0{}f}".format(tpPrice1, self.ticksize[symbol])
-                try:
-                    result = self.client.futures_create_order(
-                        symbol=symbol,
-                        side=side,
-                        positionSide=positionSide,
-                        type="TAKE_PROFIT_MARKET",
-                        stopPrice=tpPrice1,
-                        workingType="MARK_PRICE",
-                        quantity=qty1,
-                    )
-                    skey = symbol + positionSide
-                    if skey in self.tpslids:
-                        self.tpslids[skey].append(result["orderId"])
-                    else:
-                        self.tpslids[skey] = []
-                        self.tpslids[skey].append(result["orderId"])
-                except BinanceAPIException as e:
-                    logger.error(e)
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
-            if sl != -1:
-                tpPrice2 = excprice * (1 - (sl / leverage) / 100)
-                qty2 = "{:0.0{}f}".format(qty, self.stepsize[symbol])
-                tpPrice2 = "{:0.0{}f}".format(tpPrice2, self.ticksize[symbol])
-                try:
-                    result = self.client.futures_create_order(
-                        symbol=symbol,
-                        side=side,
-                        positionSide=positionSide,
-                        type="STOP_MARKET",
-                        stopPrice=tpPrice2,
-                        workingType="MARK_PRICE",
-                        quantity=qty2,
-                    )
-                    skey = symbol + positionSide
-                    if skey in self.tpslids:
-                        self.tpslids[skey].append(result["orderId"])
-                    else:
-                        self.tpslids[skey] = []
-                        self.tpslids[skey].append(result["orderId"])
-                except BinanceAPIException as e:
-                    logger.error(e)
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
-        else:
-            if tp != -1:
-                tpPrice1 = excprice * (1 - (tp / leverage) / 100)
-                qty1 = "{:0.0{}f}".format(qty, self.stepsize[symbol])
-                tpPrice1 = "{:0.0{}f}".format(tpPrice1, self.ticksize[symbol])
-                try:
-                    result = self.client.futures_create_order(
-                        symbol=symbol,
-                        side=side,
-                        positionSide=positionSide,
-                        type="TAKE_PROFIT_MARKET",
-                        stopPrice=tpPrice1,
-                        workingType="MARK_PRICE",
-                        quantity=qty1,
-                    )
-                    skey = symbol + positionSide
-                    if skey in self.tpslids:
-                        self.tpslids[skey].append(result["orderId"])
-                    else:
-                        self.tpslids[skey] = []
-                        self.tpslids[skey].append(result["orderId"])
-                except BinanceAPIException as e:
-                    logger.error(e)
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
-            if sl != -1:
-                tpPrice2 = excprice * (1 + (sl / leverage) / 100)
-                qty2 = "{:0.0{}f}".format(qty, self.stepsize[symbol])
-                tpPrice2 = "{:0.0{}f}".format(tpPrice2, self.ticksize[symbol])
-                try:
-                    result = self.client.futures_create_order(
-                        symbol=symbol,
-                        side=side,
-                        positionSide=positionSide,
-                        type="STOP_MARKET",
-                        stopPrice=tpPrice2,
-                        workingType="MARK_PRICE",
-                        quantity=qty2,
-                    )
-                    skey = symbol + positionSide
-                    if skey in self.tpslids:
-                        self.tpslids[skey].append(result["orderId"])
-                    else:
-                        self.tpslids[skey] = []
-                        self.tpslids[skey].append(result["orderId"])
-                except BinanceAPIException as e:
-                    logger.error(e)
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
-        return
-
-    def query_trade(
-        self,
-        orderId,
-        symbol,
-        positionKey,
-        isOpen,
-        uname,
-        takeProfit,
-        stopLoss,
-        Leverage,
-    ):  # ONLY to be run as thread
-        numTries = 0
-        time.sleep(1)
-        result = ""
-        executed_qty = 0
-        while True:
-            try:
-                result = self.client.futures_get_order(symbol=symbol, orderId=orderId)
-                if result["status"] == "FILLED":
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id,
-                        text=f"Order ID {orderId} ({positionKey}) fulfilled successfully.",
-                    )
-                    # if cid in self.unfulfilledPos:
-                    #     del self.unfulfilledPos[cid]
-                    # ADD TO POSITION
-                    if isOpen:
-                        if positionKey in self.positions:
-                            self.positions[positionKey] += float(result["executedQty"])
-                        else:
-                            self.positions[positionKey] = float(result["executedQty"])
-                        try:
-                            self.tpsl_trade(
-                                symbol,
-                                result["side"],
-                                result["positionSide"],
-                                float(result["executedQty"]),
-                                float(result["avgPrice"]),
-                                Leverage,
-                                takeProfit,
-                                stopLoss,
-                            )
-                        except:
-                            return
-                    else:
-                        if positionKey in self.positions:
-                            self.positions[positionKey] -= float(result["executedQty"])
-                        else:
-                            self.positions[positionKey] = 0
-                        try:
-                            res = self.client.futures_position_information(
-                                symbol=symbol
-                            )
-                        except BinanceAPIException as e:
-                            logger.error(str(e))
-                            return
-                        for pos in res:
-                            if (
-                                pos["positionSide"] == result["positionSide"]
-                                and float(pos["positionAmt"]) == 0
-                            ):
-                                if positionKey in self.tpslids:
-                                    idlist = self.tpslids[positionKey]
-                                    try:
-                                        for id in idlist:
-                                            self.client.futures_cancel_order(
-                                                symbol=symbol, orderId=id
-                                            )
-                                        self.tpslids[positionKey] = []
-                                    except BinanceAPIException as e:
-                                        logger.error(str(e))
-                                self.positions[positionKey] = 0
-
-                    return
-                elif result["status"] in [
-                    "CANCELED",
-                    "PENDING_CANCEL",
-                    "REJECTED",
-                    "EXPIRED",
-                ]:
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id,
-                        text=f"Order ID {orderId} ({positionKey}) is cancelled/rejected.",
-                    )
-                    # if cid in self.unfulfilledPos:
-                    #     del self.unfulfilledPos[cid]
-                    return
-                elif result["status"] == "PARTIALLY_FILLED":
-                    updatedQty = float(result["executedQty"]) - executed_qty
-                    if isOpen:
-                        if positionKey in self.positions:
-                            self.positions[positionKey] += updatedQty
-                        else:
-                            self.positions[positionKey] = updatedQty
-                    else:
-                        if positionKey in self.positions:
-                            self.positions[positionKey] -= float(result["executedQty"])
-                        else:
-                            self.positions[positionKey] = 0
-                    executed_qty = float(result["executedQty"])
-            except:
-                pass
-            if numTries >= 59:
-                break
-            time.sleep(60)
-            numTries += 1
-        if result != "" and result["status"] == "PARTIALLY_FILLED":
-            updater.bot.sendMessage(
-                chat_id=self.chat_id,
-                text=f"Order ID {orderId} ({positionKey}) is only partially filled. The rest will be cancelled.",
-            )
-            try:
-                self.tpsl_trade(
-                    symbol,
-                    result["side"],
-                    result["positionSide"],
-                    float(result["executedQty"]),
-                    float(result["avgPrice"]),
-                    Leverage,
-                    takeProfit,
-                    stopLoss,
-                )
-                self.client.futures_cancel_order(symbol=symbol, orderId=orderId)
-            except:
-                pass
-
-        if result != "" and result["status"] == "NEW":
-            updater.bot.sendMessage(
-                chat_id=self.chat_id,
-                text=f"Order ID {orderId} ({positionKey}) has not been filled. It will be cancelled.",
-            )
-            try:
-                self.client.futures_cancel_order(symbol=symbol, orderId=orderId)
-            except:
-                pass
-        # if cid in self.unfulfilledPos:
-        #     del self.unfulfilledPos[cid]
+        return self.client.get_symbols()
 
     def open_trade(self, df):
-        logger.info("Attempting to open trade.")
-        self.reload()
-        logger.info("DEBUG\n" + df.to_string())
-        df = df.values
-        for tradeinfo in df:
-            isOpen = False
-            types = tradeinfo[0].upper()
-            balance, collateral, coin = 0, 0, ""
-            try:
-                coin = "USDT"
-                for asset in self.client.futures_account()["assets"]:
-                    if asset["asset"] == "USDT":
-                        balance = asset["maxWithdrawAmount"]
-                        break
-                if tradeinfo[1][-4:] == "BUSD":
-                    tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id,
-                        text="Our system only supports USDT. This trade will be executed in USDT instead of BUSD.",
-                    )
-            except BinanceAPIException as e:
-                coin = "USDT"
-                balance = "0"
-                logger.error(e)
-            balance = float(balance)
-            if types[:4] == "OPEN":
-                isOpen = True
-                positionSide = types[4:]
-                if positionSide == "LONG":
-                    side = "BUY"
-                else:
-                    side = "SELL"
-                try:
-                    self.client.futures_change_leverage(
-                        symbol=tradeinfo[1], leverage=self.leverage[tradeinfo[1]]
-                    )
-                except:
-                    pass
-            else:
-                positionSide = types[5:]
-                if positionSide == "LONG":
-                    side = "SELL"
-                else:
-                    side = "BUY"
-            if not tradeinfo[1] in self.proportion:
-                updater.bot.sendMessage(
-                    chat_id=self.chat_id,
-                    text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol.",
-                )
-                continue
-            quant = abs(tradeinfo[2]) * self.proportion[tradeinfo[1]]
-            checkKey = tradeinfo[1].upper() + positionSide
-            if not isOpen and (
-                (checkKey not in self.positions) or (self.positions[checkKey] < quant)
-            ):
-                if checkKey not in self.positions or self.positions[checkKey] == 0:
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id,
-                        text=f"Close {checkKey}: This trade will not be executed because your opened positions with this trader is 0.",
-                    )
-                    continue
-                elif self.positions[checkKey] < quant:
-                    quant = min(self.positions[checkKey], quant)
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id,
-                        text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
-                    )
-            elif not isOpen and quant / self.positions[checkKey] > 0.9:
-                quant = max(self.positions[checkKey], quant)
-            if quant == 0:
-                updater.bot.sendMessage(
-                    chat_id=self.chat_id,
-                    text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
-                )
-                continue
-            latest_price = float(
-                self.client.futures_mark_price(symbol=tradeinfo[1])["markPrice"]
-            )
-            reqticksize = self.ticksize[tradeinfo[1]]
-            reqstepsize = self.stepsize[tradeinfo[1]]
-            quant = round_up(quant, reqstepsize)
-            collateral = (latest_price * quant) / self.leverage[tradeinfo[1]]
-            quant = str(quant)
-            if isOpen:
-                updater.bot.sendMessage(
-                    chat_id=self.chat_id,
-                    text=f"For the following trade, you will need {collateral:.3f}{coin} as collateral.",
-                )
-                if collateral >= balance * self.safety_ratio:
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id,
-                        text=f"WARNING: this trade will take up more than {self.safety_ratio} of your available balance. It will NOT be executed. Manage your risks accordingly and reduce proportion if necessary.",
-                    )
-                    continue
-            if isinstance(tradeinfo[3], str):
-                tradeinfo[3] = tradeinfo[3].replace(",", "")
-            # target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
-            try:
-                tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
-                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                rvalue = self.client.futures_create_order(
-                    symbol=tradeinfo[1],
-                    side=side,
-                    positionSide=positionSide,
-                    type="MARKET",
-                    quantity=quant,
-                )
-                logger.info(f"{self.uname} opened order.")
-                positionKey = tradeinfo[1] + positionSide
-                t1 = threading.Thread(
-                    target=self.query_trade,
-                    args=(
-                        rvalue["orderId"],
-                        tradeinfo[1],
-                        positionKey,
-                        isOpen,
-                        self.uname,
-                        self.take_profit_percent[tradeinfo[1]],
-                        self.stop_loss_percent[tradeinfo[1]],
-                        self.leverage[tradeinfo[1]],
-                    ),
-                )
-                t1.start()
-            except BinanceAPIException as e:
-                logger.error(e)
-                if not isOpen and str(e).find("2022") >= 0:
-                    positionKey = tradeinfo[1] + positionSide
-                    self.positions[positionKey] = 0
-                updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
+        return self.client.open_trade(
+            df,
+            self.uname,
+            self.proportion,
+            self.leverage,
+            self.lmode,
+            self.tmodes,
+            self.positions,
+            self.take_profit_percent,
+            self.stop_loss_percent,
+            False,
+        )
 
     def reload(self):
-        info = self.client.futures_exchange_info()
-        secondticksize = {}
-        secondstepsize = {}
-        for thing in info["symbols"]:
-            secondticksize[thing["symbol"]] = round(
-                -math.log(float(thing["filters"][0]["tickSize"]), 10)
-            )
-            secondstepsize[thing["symbol"]] = round(
-                -math.log(float(thing["filters"][1]["stepSize"]), 10)
-            )
-        self.ticksize = secondticksize
-        self.stepsize = secondstepsize
+        self.client.reload()
+        symbollist = self.client.get_symbols()
+        secondProportion = {}
+        secondLeverage = {}
+        secondtmodes = {}
+        secondtp = {}
+        secondsl = {}
+        for symbol in symbollist:
+            if symbol in self.proportion:
+                secondProportion[symbol] = self.proportion[symbol]
+                secondLeverage[symbol] = self.leverage[symbol]
+                secondtmodes[symbol] = self.tmodes[symbol]
+                secondtp[symbol] = self.take_profit_percent[symbol]
+                secondsl[symbol] = self.stop_loss_percent[symbol]
+            else:
+                secondProportion[symbol] = 0
+                secondLeverage[symbol] = 20
+                secondtmodes[symbol] = 0
+                secondtp[symbol] = -1
+                secondsl[symbol] = -1
+                updater.bot.sendMessage(
+                    chat_id=self.chat_id,
+                    text=f"Please note that there is a new symbol {symbol} available. You may want to adjust your settings for it.",
+                )
+        self.proportion = secondProportion
+        self.leverage = secondLeverage
+        self.tmodes = secondtmodes
+        self.take_profit_percent = secondtp
+        self.stop_loss_percent = secondsl
+        return
 
     def change_safety_ratio(self, safety_ratio):
         logger.info(f"{self.uname} changed safety ratio.")
@@ -1664,14 +1384,30 @@ class userClient:
         return
 
     def get_balance(self):
-        try:
-            result = self.client.futures_account()["assets"]
-            for asset in result:
-                if asset["asset"] == "USDT":
-                    tosend = f"Your USDT account balance:\nBalance: {asset['walletBalance']}\nUnrealized PNL: {asset['unrealizedProfit']}\nMargin balance: {asset['marginBalance']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-        except BinanceAPIException as e:
-            updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
+        return self.client.get_balance()
+
+
+class Auth(requests.auth.AuthBase):
+    def __init__(self, api_key, secret_key):
+        self.api_key = api_key
+        self.secret_key = secret_key
+
+    def __call__(self, request):
+        nonce = str(int(1000 * time.time()))
+        strBody = request.body.decode() if request.body else ""
+        message = nonce + ":" + request.method + request.path_url + (strBody or "")
+        signature = hmac.new(
+            self.secret_key.encode(), message.encode(), hashlib.sha256
+        ).hexdigest()
+        request.headers.update(
+            {
+                "X-ACCESS-NONCE": nonce,
+                "X-ACCESS-KEY": self.api_key,
+                "X-ACCESS-SIGN": signature,
+            }
+        )
+        return request
+
 
 class AAXClient:
     def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
@@ -1706,9 +1442,8 @@ class AAXClient:
         ).json()
         if response["message"] == "Success" or response["message"] == "fsuccess":
             updater.bot.sendMessage(chat_id=self.chat_id, text="Success!")
-            for trader in CurrentUsers[self.chat_id].threads:
-                trader.positions[symbol + "LONG"] = 0
-                trader.positions[symbol + "SHORT"] = 0
+            current_users[self.chat_id].positions[symbol + "LONG"] = 0
+            current_users[self.chat_id].positions[symbol + "SHORT"] = 0
         else:
             updater.bot.sendMessage(
                 chat_id=self.chat_id, text=f"Error: f{response['message']}"
@@ -1746,47 +1481,47 @@ class AAXClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] += float(response["cumQty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = float(response["cumQty"])
                         UserLocks[self.chat_id].release()
                     else:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] -= float(response["cumQty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         if (
-                            CurrentUsers[self.chat_id]
+                            current_users[self.chat_id]
                             .threads[idx]
                             .positions[positionKey]
                             < 0
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         UserLocks[self.chat_id].release()
                         # check positions thenn close all
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {CurrentUsers[self.chat_id].threads[idx].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].threads[idx].positions[positionKey]}"
                     )
                     return
                 elif response["orderStatus"] in [4, 5, 6, 10, 11]:
@@ -1798,32 +1533,32 @@ class AAXClient:
                 elif response["orderStatus"] == 2:
                     updatedQty = float(response["cumQty"]) - executed_qty
                     if isOpen:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] += updatedQty
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = updatedQty
                         UserLocks[self.chat_id].release()
                     else:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] -= float(response["cumQty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         UserLocks[self.chat_id].release()
@@ -2143,6 +1878,7 @@ class AAXClient:
     def round_up(self, quant, minsize):
         return math.ceil(quant / minsize)
 
+
 class BybitClient:
     def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
         self.client = bybit.bybit(test=False, api_key=api_key, api_secret=api_secret)
@@ -2164,10 +1900,10 @@ class BybitClient:
         for symbol in self.ticksize:
             self.client.LinearPositions.LinearPositions_switchIsolated(
                 symbol=symbol, is_isolated=False, buy_leverage=20, sell_leverage=20
-            )
+            ).result()
             self.client.LinearPositions.LinearPositions_switchMode(
                 symbol=symbol, tp_sl_mode="Partial"
-            )
+            ).result()
 
     def get_symbols(self):
         symbolList = []
@@ -2178,7 +1914,7 @@ class BybitClient:
     def close_position(self, symbol):
         result = self.client.LinearPositions.LinearPositions_myPosition(
             symbol=symbol
-        ).result()
+        ).result()[0]
         response = ""
         for pos in result["result"]:
             if float(pos["free_qty"]) > 0:
@@ -2193,7 +1929,7 @@ class BybitClient:
                     close_on_trigger=True,
                 ).result()
         updater.bot.sendMessage(chat_id=self.chat_id, text="Success!")
-        for trader in CurrentUsers[self.chat_id].threads:
+        for trader in current_users[self.chat_id].threads:
             trader.positions[symbol + "LONG"] = 0
             trader.positions[symbol + "SHORT"] = 0
         return
@@ -2214,7 +1950,7 @@ class BybitClient:
                         take_profit=float(tpPrice1),
                         tp_trigger_by="MarkPrice",
                         tp_size=float(qty1),
-                    ).result()
+                    ).result()[0]
                     if result["ret_msg"] != "OK":
                         logger.error(f"Error in tpsl: {result['ret_msg']}")
                 except:
@@ -2230,7 +1966,7 @@ class BybitClient:
                         stop_loss=float(tpPrice2),
                         sl_trigger_by="MarkPrice",
                         sl_size=float(qty2),
-                    ).result()
+                    ).result()[0]
                     if result["ret_msg"] != "OK":
                         logger.error(f"Error in tpsl: {result['ret_msg']}")
                 except:
@@ -2247,7 +1983,7 @@ class BybitClient:
                         take_profit=float(tpPrice1),
                         tp_trigger_by="MarkPrice",
                         tp_size=float(qty1),
-                    ).result()
+                    ).result()[0]
                     if result["ret_msg"] != "OK":
                         logger.error(f"Error in tpsl: {result['ret_msg']}")
                 except:
@@ -2263,7 +1999,7 @@ class BybitClient:
                         stop_loss=float(tpPrice2),
                         sl_trigger_by="MarkPrice",
                         sl_size=float(qty2),
-                    ).result()
+                    ).result()[0]
                     if result["ret_msg"] != "OK":
                         logger.error(f"Error in tpsl: {result['ret_msg']}")
                 except:
@@ -2289,7 +2025,7 @@ class BybitClient:
             try:
                 result = self.client.LinearOrder.LinearOrder_query(
                     symbol=symbol, order_id=orderId
-                ).result()
+                ).result()[0]
                 if result["ret_msg"] != "OK":
                     logger.error("There is an error!")
                     return
@@ -2301,17 +2037,17 @@ class BybitClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] += float(result["cum_exec_qty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = float(result["cum_exec_qty"])
                         UserLocks[self.chat_id].release()
@@ -2329,45 +2065,45 @@ class BybitClient:
                         except:
                             pass
                     else:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] -= float(result["cum_exec_qty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         if (
-                            CurrentUsers[self.chat_id]
+                            current_users[self.chat_id]
                             .threads[idx]
                             .positions[positionKey]
                             < 0
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         UserLocks[self.chat_id].release()
                         # check positions thenn close all
                         res = self.client.LinearPositions.LinearPositions_myPosition(
                             symbol=symbol
-                        ).result()["result"]
+                        ).result()[0]["result"]
                         for pos in res:
                             logger.info(str(pos))
                             if (
                                 pos["side"] == result["side"]
                                 and float(pos["size"]) == 0
                             ):
-                                CurrentUsers[self.chat_id].threads[idx].positions[
+                                current_users[self.chat_id].threads[idx].positions[
                                     positionKey
                                 ] = 0
                                 break
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {CurrentUsers[self.chat_id].threads[idx].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].threads[idx].positions[positionKey]}"
                     )
                     return
                 elif result["order_status"] in [
@@ -2383,32 +2119,32 @@ class BybitClient:
                 elif result["order_status"] == "PartiallyFilled":
                     updatedQty = float(result["cum_exec_qty"]) - executed_qty
                     if isOpen:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] += updatedQty
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = updatedQty
                         UserLocks[self.chat_id].release()
                     else:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] -= float(result["cum_exec_qty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         UserLocks[self.chat_id].release()
@@ -2438,7 +2174,7 @@ class BybitClient:
                 )
                 self.client.LinearOrder.LinearOrder_cancel(
                     symbol=symbol, order_id=orderId
-                )
+                ).result()
             except:
                 pass
 
@@ -2450,7 +2186,7 @@ class BybitClient:
             try:
                 self.client.LinearOrder.LinearOrder_cancel(
                     symbol=symbol, order_id=orderId
-                )
+                ).result()
             except:
                 pass
 
@@ -2504,11 +2240,11 @@ class BybitClient:
                     side = "Sell"
                 if lmode != 2:
                     try:
-                        self.client.Positions.Positions_saveLeverage(
+                        self.client.LinearPositions.LinearPositions_saveLeverage(
                             symbol=tradeinfo[1],
-                            leverage=leverage[tradeinfo[1]],
-                            leverage_only=True,
-                        )
+                            buy_leverage=str(leverage[tradeinfo[1]]),
+                            sell_leverage=str(leverage[tradeinfo[1]]),
+                        ).result()
                     except:
                         pass
             else:
@@ -2548,7 +2284,7 @@ class BybitClient:
             latest_price = float(
                 self.client.Market.Market_symbolInfo(symbol=tradeinfo[1]).result()[0][
                     "result"
-                ]["mark_price"]
+                ][0]["mark_price"]
             )
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
@@ -2576,21 +2312,43 @@ class BybitClient:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                    response = self.client.LinearOrder.LinearOrder_new(
-                        side=side,
-                        symbol=tradeinfo[1],
-                        order_type="Market",
-                        qty=quant,
-                        time_in_force="GoodTillCancel",
-                        reduce_only=False,
-                        close_on_trigger=False,
-                    ).result()
+                    if isOpen:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Market",
+                            qty=quant,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=False,
+                            close_on_trigger=False,
+                        ).result()[0]
+                    else:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Market",
+                            qty=quant,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=True,
+                            close_on_trigger=True,
+                        ).result()[0]
                     if response["ret_msg"] == "OK":
                         logger.info(f"{self.uname} opened order.")
                     else:
                         logger.error(f"Error: {response['ret_msg']}")
+                        updater.bot.sendMessage(
+                            chat_id=self.chat_id, text=f"Error: {response['ret_msg']}"
+                        )
+                        retmsg = response["ret_msg"]
+                        if retmsg.find("reduce-only") != -1:
+                            positionKey = tradeinfo[1] + positionSide
+                            idx = current_users[self.chat_id].trader_names.index(uname)
+                            current_users[self.chat_id].threads[idx].positions[
+                                positionKey
+                            ] = 0
                         continue
                     positionKey = tradeinfo[1] + positionSide
+                    print(response["result"]["order_id"])
                     t1 = threading.Thread(
                         target=self.query_trade,
                         args=(
@@ -2621,16 +2379,28 @@ class BybitClient:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\ntype: LIMIT\nquantity: {quant}\nPrice: {target_price}"
                     if not mute:
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                    response = self.client.LinearOrder.LinearOrder_new(
-                        side=side,
-                        symbol=tradeinfo[1],
-                        order_type="Limit",
-                        qty=quant,
-                        price=target_price,
-                        time_in_force="GoodTillCancel",
-                        reduce_only=False,
-                        close_on_trigger=False,
-                    ).result()
+                    if isOpen:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Limit",
+                            qty=quant,
+                            price=target_price,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=False,
+                            close_on_trigger=False,
+                        ).result()[0]
+                    else:
+                        response = self.client.LinearOrder.LinearOrder_new(
+                            side=side,
+                            symbol=tradeinfo[1],
+                            order_type="Limit",
+                            qty=quant,
+                            price=target_price,
+                            time_in_force="GoodTillCancel",
+                            reduce_only=True,
+                            close_on_trigger=True,
+                        ).result()[0]
                     if response["ret_msg"] == "OK":
                         logger.info(f"{self.uname} opened order.")
                     else:
@@ -2687,25 +2457,22 @@ class BybitClient:
 
     def get_balance(self, querymode=True):
         try:
-            params = {"purseType": "FUTP"}
-            response = requests.get(
-                "https://api.aax.com/v2/account/balances", params=params, auth=self.auth
-            ).json()
-            for asset in response["data"]:
-                if asset["currency"] == "USDT":
-                    if querymode:
-                        tosend = f"Your USDT account balance:\nAvailable: {asset['available']}\nLocked: {asset['unavailable']}"
-                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-                    else:
-                        return float(asset["available"])
+            result = self.client.Wallet.Wallet_getBalance(coin="USDT").result()
+            result = result[0]["result"]["USDT"]
+            if querymode:
+                tosend = f"Your USDT account balance:\nBalance: {result['equity']}\nAvailable: {result['available_balance']}\nRealised PNL: {result['realised_pnl']}\nUnrealized PNL: {result['unrealised_pnl']}"
+                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+            else:
+                return float(result["available_balance"])
         except:
             updater.bot.sendMessage(
                 chat_id=self.chat_id, text="Unable to retrieve balance."
             )
 
-    def round_up(n, decimals=0):
+    def round_up(self, n, decimals=0):
         multiplier = 10 ** decimals
         return math.ceil(n * multiplier) / multiplier
+
 
 class BinanceClient:
     def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
@@ -2763,13 +2530,13 @@ class BinanceClient:
                         quantity=qty1,
                     )
                     skey = symbol + positionSide
-                    if skey in CurrentUsers[self.chat_id].tpslids:
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                    if skey in current_users[self.chat_id].tpslids:
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                     else:
-                        CurrentUsers[self.chat_id].tpslids[skey] = []
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                        current_users[self.chat_id].tpslids[skey] = []
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                 except BinanceAPIException as e:
@@ -2790,13 +2557,13 @@ class BinanceClient:
                         quantity=qty2,
                     )
                     skey = symbol + positionSide
-                    if skey in CurrentUsers[self.chat_id].tpslids:
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                    if skey in current_users[self.chat_id].tpslids:
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                     else:
-                        CurrentUsers[self.chat_id].tpslids[skey] = []
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                        current_users[self.chat_id].tpslids[skey] = []
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                 except BinanceAPIException as e:
@@ -2818,13 +2585,13 @@ class BinanceClient:
                         quantity=qty1,
                     )
                     skey = symbol + positionSide
-                    if skey in CurrentUsers[self.chat_id].tpslids:
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                    if skey in current_users[self.chat_id].tpslids:
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                     else:
-                        CurrentUsers[self.chat_id].tpslids[skey] = []
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                        current_users[self.chat_id].tpslids[skey] = []
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                 except BinanceAPIException as e:
@@ -2845,13 +2612,13 @@ class BinanceClient:
                         quantity=qty2,
                     )
                     skey = symbol + positionSide
-                    if skey in CurrentUsers[self.chat_id].tpslids:
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                    if skey in current_users[self.chat_id].tpslids:
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                     else:
-                        CurrentUsers[self.chat_id].tpslids[skey] = []
-                        CurrentUsers[self.chat_id].tpslids[skey].append(
+                        current_users[self.chat_id].tpslids[skey] = []
+                        current_users[self.chat_id].tpslids[skey].append(
                             result["orderId"]
                         )
                 except BinanceAPIException as e:
@@ -2884,17 +2651,17 @@ class BinanceClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] += float(result["executedQty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = float(result["executedQty"])
                         UserLocks[self.chat_id].release()
@@ -2912,26 +2679,26 @@ class BinanceClient:
                         except:
                             pass
                     else:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] -= float(result["executedQty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         if (
-                            CurrentUsers[self.chat_id]
+                            current_users[self.chat_id]
                             .threads[idx]
                             .positions[positionKey]
                             < 0
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         UserLocks[self.chat_id].release()
@@ -2943,8 +2710,8 @@ class BinanceClient:
                                 pos["positionSide"] == result["positionSide"]
                                 and float(pos["positionAmt"]) == 0
                             ):
-                                if positionKey in CurrentUsers[self.chat_id].tpslids:
-                                    idlist = CurrentUsers[self.chat_id].tpslids[
+                                if positionKey in current_users[self.chat_id].tpslids:
+                                    idlist = current_users[self.chat_id].tpslids[
                                         positionKey
                                     ]
                                     try:
@@ -2952,16 +2719,16 @@ class BinanceClient:
                                             self.client.futures_cancel_order(
                                                 symbol=symbol, orderId=id
                                             )
-                                        CurrentUsers[self.chat_id].tpslids[
+                                        current_users[self.chat_id].tpslids[
                                             positionKey
                                         ] = []
                                     except BinanceAPIException as e:
                                         logger.error(str(e))
-                                CurrentUsers[self.chat_id].threads[idx].positions[
+                                current_users[self.chat_id].threads[idx].positions[
                                     positionKey
                                 ] = 0
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {CurrentUsers[self.chat_id].threads[idx].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].threads[idx].positions[positionKey]}"
                     )
                     return
                 elif result["status"] in [
@@ -2978,32 +2745,32 @@ class BinanceClient:
                 elif result["status"] == "PARTIALLY_FILLED":
                     updatedQty = float(result["executedQty"]) - executed_qty
                     if isOpen:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] += updatedQty
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = updatedQty
                         UserLocks[self.chat_id].release()
                     else:
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
+                        idx = current_users[self.chat_id].trader_names.index(uname)
                         UserLocks[self.chat_id].acquire()  # needed bc run as thread
                         if (
                             positionKey
-                            in CurrentUsers[self.chat_id].threads[idx].positions
+                            in current_users[self.chat_id].threads[idx].positions
                         ):
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] -= float(result["executedQty"])
                         else:
-                            CurrentUsers[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = 0
                         UserLocks[self.chat_id].release()
@@ -3109,7 +2876,7 @@ class BinanceClient:
             if not tradeinfo[1] in proportion:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol.",
+                    text=f"This trade will not be executed since {tradeinfo[1]} is not a valid symbol. If this is a new symbol, set your proportions first.",
                 )
                 continue
             quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
@@ -3194,13 +2961,38 @@ class BinanceClient:
                     t1.start()
                 except BinanceAPIException as e:
                     logger.error(e)
+                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
                     if not isOpen and str(e).find("2022") >= 0:
                         positionKey = tradeinfo[1] + positionSide
-                        idx = CurrentUsers[self.chat_id].trader_names.index(uname)
-                        CurrentUsers[self.chat_id].threads[idx].positions[
+                        idx = current_users[self.chat_id].trader_names.index(uname)
+                        current_users[self.chat_id].threads[idx].positions[
                             positionKey
                         ] = 0
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
+                        res = self.client.futures_position_information(
+                            symbol=tradeinfo[1]
+                        )
+                        for pos in res:
+                            if (
+                                pos["positionSide"] == positionSide
+                                and float(pos["positionAmt"]) == 0
+                            ):
+                                if positionKey in current_users[self.chat_id].tpslids:
+                                    idlist = current_users[self.chat_id].tpslids[
+                                        positionKey
+                                    ]
+                                    try:
+                                        for id in idlist:
+                                            self.client.futures_cancel_order(
+                                                symbol=tradeinfo[1], orderId=id
+                                            )
+                                        logger.info(
+                                            f"{tradeinfo[1]} tpsl order cancelled!"
+                                        )
+                                        current_users[self.chat_id].tpslids[
+                                            positionKey
+                                        ] = []
+                                    except BinanceAPIException as e2:
+                                        logger.error(str(e2))
             else:
                 try:
                     target_price = float(target_price)
@@ -3278,9 +3070,6 @@ class BinanceClient:
         )
         return
 
-    def change_keys(self, apikey, apisecret):
-        self.client = Client(apikey, apisecret)  # d
-
     def get_balance(self):
         try:
             result = self.client.futures_account()["assets"]
@@ -3297,7 +3086,6 @@ class BinanceClient:
             text="This function is not implemented in the Binance client.",
         )
         return
-
 
 
 def restore_save_data():
@@ -3472,11 +3260,17 @@ def main():
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler22 = ConversationHandler(
-        entry_points=[CommandHandler("changeapi", change_api)],
+        entry_points=[CommandHandler("changeapi", choose_platform)],
         states={
+            SEP3: [MessageHandler(Filters.regex("^(1|2|3)$"), change_api)],
             SEP1: [MessageHandler(Filters.text & ~Filters.command, change_secret)],
             SEP2: [MessageHandler(Filters.text & ~Filters.command, change_bnall)],
         },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler23 = ConversationHandler(
+        entry_points=[CommandHandler("closeposition", close_position)],
+        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     global current_stream
@@ -3497,6 +3291,7 @@ def main():
     dispatcher.add_handler(conv_handler18)
     dispatcher.add_handler(conv_handler19)
     dispatcher.add_handler(conv_handler22)
+    dispatcher.add_handler(conv_handler23)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))

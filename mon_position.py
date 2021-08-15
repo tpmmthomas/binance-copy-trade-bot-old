@@ -682,7 +682,13 @@ class FetchLatestPosition(threading.Thread):
         secondtp = {}
         secondsl = {}
         for symbol in allsymbols:
-            if symbol in self.proportion:
+            if (
+                symbol in self.proportion
+                and symbol in self.leverage
+                and symbol in self.tmodes
+                and symbol in self.take_profit_percent
+                and symbol in self.stop_loss_percent
+            ):
                 secondProportion[symbol] = self.proportion[symbol]
                 secondLeverage[symbol] = self.leverage[symbol]
                 secondtmodes[symbol] = self.tmodes[symbol]
@@ -696,7 +702,7 @@ class FetchLatestPosition(threading.Thread):
                 secondsl[symbol] = -1
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text=f"Please note that there is a new symbol {symbol} available. You may want to adjust your settings for it.",
+                    text=f"Please note that there is a new symbol {symbol} available for {self.name}. You may want to adjust your settings for it.",
                 )
         self.proportion = secondProportion
         self.leverage = secondLeverage
