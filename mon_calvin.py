@@ -3022,7 +3022,7 @@ def restore_save_data():
             x["tp"],
             x["sl"],
             x["lmode"],
-            3,  # x["platform"],
+            x["platform"],
         )
 
 
