@@ -35,6 +35,7 @@ logging.basicConfig(
     AUTH,
     SEP1,
     SEP2,
+    PLATFORM,
     CHECKPROP,
     COCO,
     TRADERURL,
@@ -85,7 +86,7 @@ logging.basicConfig(
     SAFERATIO,
     SEP3,
     CP1,
-) = range(53)
+) = range(54)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
@@ -366,7 +367,9 @@ def process_newest_position(diff, df):
 def automatic_reload():
     global current_stream
     while True:
-        time.sleep(23 * 60 * 60)
+        time.sleep(3 * 60 * 60)
+        for user in current_users:
+            current_users[user].reload()
         save_to_file(None, None)
 
 
@@ -407,7 +410,21 @@ Type "yes" (lowercase) if you agree. Otherwise type /cancel and exit.',
 
 def disclaimer_check(update: Update, context: CallbackContext):
     logger.info("%s has agreed to the disclaimer.", update.message.from_user.first_name)
-    update.message.reply_text("Please provide your API Key from Binance.")
+    update.message.reply_text(
+        "Please choose the platform:\n1. AAX\n2. Bybit\n3.Binance\nPlease enter your choice (1,2,3)"
+    )
+    return PLATFORM
+
+
+def check_platform(update: Update, context: CallbackContext):
+    platform = int(update.message.text)
+    context.user_data["platform"] = platform
+    if platform == 3:
+        update.message.reply_text("Please provide your API Key from Binance.")
+    elif platform == 2:
+        update.message.reply_text("Please provide your API Key from Bybit.")
+    else:
+        update.message.reply_text("Please provide your API Key from AAX.")
     update.message.reply_text(
         "*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",
         parse_mode=telegram.ParseMode.MARKDOWN,
@@ -460,6 +477,7 @@ def check_ratio(update: Update, context: CallbackContext):
         context.user_data["api_key"],
         context.user_data["api_secret"],
         ratio,
+        tplatform=context.user_data["platform"],
     )
     update.message.reply_text("You have successfully initialized! :)")
     return ConversationHandler.END
@@ -550,6 +568,7 @@ def save_to_file(update: Update, context: CallbackContext):
                 "positions": user.positions,
                 "proportion": user.proportion,
                 "leverage": user.leverage,
+                "platform": user.tplatform,
             }
         )
     with open("userdata_calvin.pickle", "wb") as f:
@@ -1087,7 +1106,7 @@ def close_position(update: Update, context: CallbackContext):
 
 def conf_symbol(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
-    listsymbols = user.bclient.get_symbols()
+    listsymbols = user.client.get_symbols()
     if not update.message.text in listsymbols:
         listsymbols = [[x] for x in listsymbols]
         update.message.reply_text(
@@ -1200,7 +1219,13 @@ class userClient:
         secondtp = {}
         secondsl = {}
         for symbol in symbollist:
-            if symbol in self.proportion:
+            if (
+                symbol in self.proportion
+                and symbol in self.leverage
+                and symbol in self.tmodes
+                and symbol in self.take_profit_percent
+                and symbol in self.stop_loss_percent
+            ):
                 secondProportion[symbol] = self.proportion[symbol]
                 secondLeverage[symbol] = self.leverage[symbol]
                 secondtmodes[symbol] = self.tmodes[symbol]
@@ -1256,6 +1281,7 @@ class userClient:
         return self.proportion[symbol]
 
     def change_all_proportion(self, prop):
+        self.reload()
         for symbol in self.proportion:
             self.proportion[symbol] = prop
         logger.info(f"{self.uname} Successfully changed all proportion.")
@@ -1327,6 +1353,7 @@ class userClient:
         return self.take_profit_percent[symbol], self.stop_loss_percent[symbol]
 
     def change_all_tpsl(self, tp, sl):
+        self.reload()
         try:
             tp = int(tp)
             sl = int(sl)
@@ -1481,47 +1508,26 @@ class AAXClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] += float(response["cumQty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] += float(
+                                response["cumQty"]
+                            )
                         else:
                             current_users[self.chat_id].threads[idx].positions[
                                 positionKey
                             ] = float(response["cumQty"])
-                        UserLocks[self.chat_id].release()
                     else:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] -= float(response["cumQty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] -= float(
+                                response["cumQty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        if (
-                            current_users[self.chat_id]
-                            .threads[idx]
-                            .positions[positionKey]
-                            < 0
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = 0
+                        if current_users[self.chat_id].positions[positionKey] < 0:
+                            current_users[self.chat_id].positions[positionKey] = 0
                         # check positions thenn close all
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].threads[idx].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].positions[positionKey]}"
                     )
                     return
                 elif response["orderStatus"] in [4, 5, 6, 10, 11]:
@@ -1533,35 +1539,21 @@ class AAXClient:
                 elif response["orderStatus"] == 2:
                     updatedQty = float(response["cumQty"]) - executed_qty
                     if isOpen:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[
                                 positionKey
                             ] += updatedQty
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].positions[
                                 positionKey
                             ] = updatedQty
-                        UserLocks[self.chat_id].release()
                     else:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] -= float(response["cumQty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] -= float(
+                                response["cumQty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = 0
                     executed_qty = float(response["cumQty"])
             except:
                 logger.error("some error.")
@@ -1915,7 +1907,6 @@ class BybitClient:
         result = self.client.LinearPositions.LinearPositions_myPosition(
             symbol=symbol
         ).result()[0]
-        response = ""
         for pos in result["result"]:
             if float(pos["free_qty"]) > 0:
                 side = "Buy" if pos["side"] == "Sell" else "Buy"
@@ -1929,9 +1920,8 @@ class BybitClient:
                     close_on_trigger=True,
                 ).result()
         updater.bot.sendMessage(chat_id=self.chat_id, text="Success!")
-        for trader in current_users[self.chat_id].threads:
-            trader.positions[symbol + "LONG"] = 0
-            trader.positions[symbol + "SHORT"] = 0
+        current_users[self.chat_id].positions[symbol + "LONG"] = 0
+        current_users[self.chat_id].positions[symbol + "SHORT"] = 0
         return
 
     def tpsl_trade(
@@ -2037,20 +2027,14 @@ class BybitClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] += float(result["cum_exec_qty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] += float(
+                                result["cum_exec_qty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = float(result["cum_exec_qty"])
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = float(
+                                result["cum_exec_qty"]
+                            )
                         try:
                             self.tpsl_trade(
                                 symbol,
@@ -2065,29 +2049,14 @@ class BybitClient:
                         except:
                             pass
                     else:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] -= float(result["cum_exec_qty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] -= float(
+                                result["cum_exec_qty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        if (
-                            current_users[self.chat_id]
-                            .threads[idx]
-                            .positions[positionKey]
-                            < 0
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = 0
+                        if current_users[self.chat_id].positions[positionKey] < 0:
+                            current_users[self.chat_id].positions[positionKey] = 0
                         # check positions thenn close all
                         res = self.client.LinearPositions.LinearPositions_myPosition(
                             symbol=symbol
@@ -2098,12 +2067,10 @@ class BybitClient:
                                 pos["side"] == result["side"]
                                 and float(pos["size"]) == 0
                             ):
-                                current_users[self.chat_id].threads[idx].positions[
-                                    positionKey
-                                ] = 0
+                                current_users[self.chat_id].positions[positionKey] = 0
                                 break
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].threads[idx].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].positions[positionKey]}"
                     )
                     return
                 elif result["order_status"] in [
@@ -2119,35 +2086,21 @@ class BybitClient:
                 elif result["order_status"] == "PartiallyFilled":
                     updatedQty = float(result["cum_exec_qty"]) - executed_qty
                     if isOpen:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[
                                 positionKey
                             ] += updatedQty
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].positions[
                                 positionKey
                             ] = updatedQty
-                        UserLocks[self.chat_id].release()
                     else:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] -= float(result["cum_exec_qty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] -= float(
+                                result["cum_exec_qty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = 0
                     executed_qty = float(result["cum_exec_qty"])
             except:
                 logger.error("eeerrroooorrr")
@@ -2651,20 +2604,14 @@ class BinanceClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] += float(result["executedQty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] += float(
+                                result["executedQty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = float(result["executedQty"])
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = float(
+                                result["executedQty"]
+                            )
                         try:
                             self.tpsl_trade(
                                 symbol,
@@ -2679,29 +2626,14 @@ class BinanceClient:
                         except:
                             pass
                     else:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] -= float(result["executedQty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] -= float(
+                                result["executedQty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        if (
-                            current_users[self.chat_id]
-                            .threads[idx]
-                            .positions[positionKey]
-                            < 0
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = 0
+                        if current_users[self.chat_id].positions[positionKey] < 0:
+                            current_users[self.chat_id].positions[positionKey] = 0
                         # check positions thenn close all
                         res = self.client.futures_position_information(symbol=symbol)
                         for pos in res:
@@ -2724,11 +2656,9 @@ class BinanceClient:
                                         ] = []
                                     except BinanceAPIException as e:
                                         logger.error(str(e))
-                                current_users[self.chat_id].threads[idx].positions[
-                                    positionKey
-                                ] = 0
+                                current_users[self.chat_id].positions[positionKey] = 0
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].threads[idx].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].positions[positionKey]}"
                     )
                     return
                 elif result["status"] in [
@@ -2745,35 +2675,21 @@ class BinanceClient:
                 elif result["status"] == "PARTIALLY_FILLED":
                     updatedQty = float(result["executedQty"]) - executed_qty
                     if isOpen:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[
                                 positionKey
                             ] += updatedQty
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
+                            current_users[self.chat_id].positions[
                                 positionKey
                             ] = updatedQty
-                        UserLocks[self.chat_id].release()
                     else:
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        UserLocks[self.chat_id].acquire()  # needed bc run as thread
-                        if (
-                            positionKey
-                            in current_users[self.chat_id].threads[idx].positions
-                        ):
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] -= float(result["executedQty"])
+                        if positionKey in current_users[self.chat_id].positions:
+                            current_users[self.chat_id].positions[positionKey] -= float(
+                                result["executedQty"]
+                            )
                         else:
-                            current_users[self.chat_id].threads[idx].positions[
-                                positionKey
-                            ] = 0
-                        UserLocks[self.chat_id].release()
+                            current_users[self.chat_id].positions[positionKey] = 0
                     executed_qty = float(result["executedQty"])
             except BinanceAPIException as e:
                 logger.error(e)
@@ -2964,10 +2880,7 @@ class BinanceClient:
                     updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
                     if not isOpen and str(e).find("2022") >= 0:
                         positionKey = tradeinfo[1] + positionSide
-                        idx = current_users[self.chat_id].trader_names.index(uname)
-                        current_users[self.chat_id].threads[idx].positions[
-                            positionKey
-                        ] = 0
+                        current_users[self.chat_id].positions[positionKey] = 0
                         res = self.client.futures_position_information(
                             symbol=tradeinfo[1]
                         )
@@ -3109,6 +3022,7 @@ def restore_save_data():
             x["tp"],
             x["sl"],
             x["lmode"],
+            3,  # x["platform"],
         )
 
 
@@ -3119,6 +3033,9 @@ def main():
         states={
             AUTH: [MessageHandler(Filters.text & ~Filters.command, auth_check)],
             DISCLAIMER: [MessageHandler(Filters.regex("^(yes)$"), disclaimer_check)],
+            PLATFORM: [
+                MessageHandler(Filters.regex("^(1|2|3)$"), check_platform)
+            ],  # DO COME BACK
             APIKEY: [MessageHandler(Filters.text & ~Filters.command, check_api)],
             APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
             CHECKPROP: [MessageHandler(Filters.text & ~Filters.command, check_ratio)],
