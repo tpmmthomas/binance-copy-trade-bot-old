@@ -737,7 +737,7 @@ class FetchLatestPosition(threading.Thread):
 
     def change_all_proportion(self, prop):
         self.reload()
-        for symbol in self.proportion:
+        for symbol in CurrentUsers[self.chat_id].bclient.get_symbols():
             self.proportion[symbol] = prop
         logger.info(f"{self.uname} Successfully changed all proportion.")
         updater.bot.sendMessage(
@@ -871,6 +871,7 @@ class FetchLatestPosition(threading.Thread):
         return self.take_profit_percent[symbol], self.stop_loss_percent[symbol]
 
     def change_all_tpsl(self, tp, sl):
+        self.reload()
         try:
             tp = int(tp)
             sl = int(sl)
