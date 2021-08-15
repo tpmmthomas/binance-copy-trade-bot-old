@@ -891,6 +891,7 @@ class FetchLatestPosition(threading.Thread):
         return
 
     def change_tpsl(self, symbol, tp, sl):
+        self.reload()
         if symbol not in self.take_profit_percent:
             updater.bot.sendMessage(
                 chat_id=self.chat_id,
