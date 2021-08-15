@@ -1192,6 +1192,7 @@ class userClient:
                 self.take_profit_percent[symbol] = tp
             if self.needsl:
                 self.stop_loss_percent[symbol] = sl
+            self.tmodes[symbol] = 0
 
     def get_symbols(self):
         return self.client.get_symbols()
