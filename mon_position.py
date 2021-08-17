@@ -237,6 +237,7 @@ class FetchLatestPosition(threading.Thread):
         self.muteerror = False
         self.mutetrade = False
         self.lastPosTime = datetime.now() + timedelta(hours=8)
+        self.changeNotiTime = datetime.now()
         if self.positions is None:
             self.positions = {}
         if isinstance(tmode, int):
@@ -522,9 +523,10 @@ class FetchLatestPosition(threading.Thread):
                 if idx3 != -1:
                     self.nochange = 0
                     self.num_no_data += 1
-                    if self.num_no_data > 29:
+                    if self.num_no_data > 35:
                         self.num_no_data = 4
                     if self.num_no_data >= 3 and not isinstance(self.prev_df, str):
+                        self.changeNotiTime = datetime.now()
                         now = datetime.now() + timedelta(hours=8)
                         self.lastPosTime = datetime.now() + timedelta(hours=8)
                         if not self.mute:
@@ -556,7 +558,14 @@ class FetchLatestPosition(threading.Thread):
                         self.first_run = False
                     self.driver.quit()
                     self.driver = None
-                    time.sleep(5 * self.num_no_data)
+                    time.sleep(6 * self.num_no_data)
+                    diff = datetime.now() - self.changeNotiTime
+                    if diff.total_seconds() / 3600 >= 24:
+                        self.changeNotiTime = datetime.now()
+                        updater.bot.sendMessage(
+                            chat_id=self.chat_id,
+                            text=f"Trader {self.name}: 24 hours no position update.",
+                        )
                     continue
                 else:
                     self.num_no_data = 0
@@ -587,6 +596,7 @@ class FetchLatestPosition(threading.Thread):
                     if not toComp.equals(prevdf):
                         isChanged = True
                 if isChanged:
+                    self.changeNotiTime = datetime.now()
                     self.nochange = 0
                     now = datetime.now() + timedelta(hours=8)
                     self.lastPosTime = datetime.now() + timedelta(hours=8)
@@ -640,7 +650,7 @@ class FetchLatestPosition(threading.Thread):
                             )
                             UserLocks[self.chat_id].release()
                 else:
-                    if self.nochange < 30:
+                    if self.nochange < 40:
                         self.nochange += 1
                     else:
                         self.nochange = 0
@@ -649,7 +659,14 @@ class FetchLatestPosition(threading.Thread):
                 self.driver.quit()
                 self.driver = None
                 self.error = 0
-                sleeptime = random.randint(46, 70)
+                diff = datetime.now() - self.changeNotiTime
+                if diff.total_seconds() / 3600 >= 24:
+                    self.changeNotiTime = datetime.now()
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id,
+                        text=f"Trader {self.name}: 24 hours no position update.",
+                    )
+                sleeptime = random.randint(45, 92)
                 time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
