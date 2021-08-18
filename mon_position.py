@@ -466,11 +466,14 @@ class FetchLatestPosition(threading.Thread):
                     "ExecPrice": executePrice,
                 }
             )
-        tosend = (
-            f"*The positions changed by the trader {self.name}:*\n"
-            + txs.to_string()
-            + "\n"
-        )
+        if not txs.empty:
+            tosend = (
+                f"*The positions changed by the trader {self.name}:*\n"
+                + txs.to_string()
+                + "\n"
+            )
+        else:
+            tosend = "No position change."
         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
         return txs
 
@@ -511,7 +514,8 @@ class FetchLatestPosition(threading.Thread):
                         continue
                 time.sleep(1)
                 master_lock.release()
-                time.sleep(5)
+                sleepmore = 3 if self.num_no_data > 0 else 0
+                time.sleep(5 + sleepmore)
                 soup = BeautifulSoup(self.driver.page_source, features="html.parser")
                 x = soup.get_text()
                 ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
@@ -521,6 +525,7 @@ class FetchLatestPosition(threading.Thread):
                 idx3 = x.find("No data")
                 x = x[idx:idx2]
                 if idx3 != -1:
+                    self.error = 0
                     self.nochange = 0
                     self.num_no_data += 1
                     if self.num_no_data > 35:
@@ -629,12 +634,13 @@ class FetchLatestPosition(threading.Thread):
                                 seconddf = output["data"].iloc[
                                     (i + 1) * 10 : min(numrows, (i + 2) * 10)
                                 ]
-                                updater.bot.sendMessage(
-                                    chat_id=self.chat_id, text=seconddf.to_string()
-                                )
+                                if not seconddf.empty:
+                                    updater.bot.sendMessage(
+                                        chat_id=self.chat_id, text=seconddf.to_string()
+                                    )
                     if not self.first_run:
                         txlist = self.changes(self.prev_df, output["data"])
-                        if self.toTrade:
+                        if self.toTrade and not txlist.empty:
                             UserLocks[self.chat_id].acquire()
                             CurrentUsers[self.chat_id].bclient.open_trade(
                                 txlist,
@@ -666,7 +672,7 @@ class FetchLatestPosition(threading.Thread):
                         chat_id=self.chat_id,
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
-                sleeptime = random.randint(45, 92)
+                sleeptime = random.randint(40, 92)
                 time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
@@ -1487,7 +1493,8 @@ def view_traderInfo(update: Update, context: CallbackContext):
             update.message.reply_text(f"{tosend}")
             for i in range(numrows // 10):
                 seconddf = msg.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
-                update.message.reply_text(f"{seconddf.to_string()}")
+                if not seconddf.empty:
+                    update.message.reply_text(f"{seconddf.to_string()}")
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
 
