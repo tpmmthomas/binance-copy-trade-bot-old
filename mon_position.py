@@ -738,7 +738,7 @@ class FetchLatestPosition(threading.Thread):
                             )
                             UserLocks[self.chat_id].release()
                 else:
-                    if self.nochange < 40:
+                    if self.nochange < 70:
                         self.nochange += 1
                     else:
                         self.nochange = 0
@@ -752,8 +752,8 @@ class FetchLatestPosition(threading.Thread):
                         chat_id=self.chat_id,
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
-                sleeptime = random.randint(6, 21)
-                time.sleep(sleeptime)
+                # sleeptime = random.randint(6, 21)
+                # time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
                 pass
