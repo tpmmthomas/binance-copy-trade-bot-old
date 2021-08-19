@@ -585,6 +585,7 @@ class FetchLatestPosition(threading.Thread):
                     )
                 except:
                     logger.error(f"{self.uname} cannot get webpage.")
+                time.sleep(3)
                 page_source = self.driver.page_source
                 self.driver.quit()
                 self.driver = None
