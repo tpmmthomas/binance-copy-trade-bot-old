@@ -2062,10 +2062,11 @@ class BybitClient:
                         res = self.client.LinearPositions.LinearPositions_myPosition(
                             symbol=symbol
                         ).result()[0]["result"]
+                        checkside = "Buy" if result["side"] == "Sell" else "Sell"
                         for pos in res:
                             logger.info(str(pos))
                             if (
-                                pos["side"] == result["side"]
+                                pos["side"] == checkside
                                 and float(pos["size"]) == 0
                             ):
                                 current_users[self.chat_id].positions[positionKey] = 0
