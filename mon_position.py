@@ -591,7 +591,7 @@ class FetchLatestPosition(threading.Thread):
                 self.driver = None
                 with releaseCond:
                     toremove_queue.put(self.unique_id)
-                    print("finishqqqqq")
+                    # print("finishqqqqq")
                     releaseCond.notifyAll()
                 # sleepmore = 3 if self.num_no_data > 0 else 0
                 # time.sleep(5 + sleepmore)
