@@ -30,7 +30,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import urllib3
 import urllib
-import queue
 
 urllib3.disable_warnings()
 # Enable logging
@@ -111,11 +110,7 @@ options.add_argument("--no-sandbox")
 options.add_argument("--disable-gpu")
 options.add_argument("--disable-dev-shm-usage")
 UserLocks = {}
-ThreadConds = {}
-waiting_queue = queue.Queue()
-toremove_queue = queue.Queue()
-releaseCond = threading.Condition()
-maxWaitTime = (0, 0)
+avgwaittime = (0, 0)
 
 
 def format_results(x, y):
@@ -184,38 +179,6 @@ def format_username(x, y):
     return words[-1]
 
 
-def RunningThreadManager():
-    running_threads = []
-    i = 0
-    global maxWaitTime
-    # print("start!")
-    time.sleep(5)
-    starttime = datetime.now()
-    while True:
-        if i >= 100:
-            time.sleep(5)
-            i = 0
-        diff = datetime.now() - starttime
-        if diff.total_seconds() >= 900:
-            starttime = datetime.now()
-            maxWaitTime = (0, 0)
-        while toremove_queue.empty() and len(running_threads) >= 3:
-            with releaseCond:
-                # logger.info("waitingng!")
-                releaseCond.wait(timeout=30)
-        if not toremove_queue.empty():
-            # logger.info("removing!")
-            cid = toremove_queue.get()
-            running_threads.remove(cid)
-        if len(running_threads) < 3 and not waiting_queue.empty():
-            # logger.info("hsd")
-            cid = waiting_queue.get()
-            with ThreadConds[cid]:
-                ThreadConds[cid].notifyAll()
-            running_threads.append(cid)
-            i += 1
-
-
 class Auth(requests.auth.AuthBase):
     def __init__(self, api_key, secret_key):
         self.api_key = api_key
@@ -278,9 +241,6 @@ class FetchLatestPosition(threading.Thread):
         self.mutetrade = False
         self.lastPosTime = datetime.now() + timedelta(hours=8)
         self.changeNotiTime = datetime.now()
-        self.idx = CurrentUsers[self.chat_id].trader_names.index(self.name)
-        self.unique_id = str(self.chat_id) + "_" + str(self.idx)
-        ThreadConds[self.unique_id] = threading.Condition()
         if self.positions is None:
             self.positions = {}
         if isinstance(tmode, int):
@@ -522,37 +482,21 @@ class FetchLatestPosition(threading.Thread):
 
     def run(self):
         logger.info("%s starting %s", self.uname, self.name)
-        global maxWaitTime
+        global avgwaittime
         endwait = datetime.now()
         while not self.isStop.is_set():
             try:
                 isChanged = False
                 time.sleep(self.error * 5.5)
                 time.sleep((self.nochange // 5) * 5)
-                with ThreadConds[self.unique_id]:
-                    waiting_queue.put(self.unique_id)
-                    r = ThreadConds[self.unique_id].wait(timeout=300)
-                logger.info(f"{self.name} acquired lock.")
-                if not r:
-                    # time.sleep(20)
-                    logger.info(
-                        f"{self.uname} {self.name} cannot get the lock for five minutes."
-                    )
-                    with releaseCond:
-                        toremove_queue.put(self.unique_id)
-                        releaseCond.notifyAll()
-                    continue
-                elif self.error == 0:
-                    difftime = datetime.now() - endwait
-                    endwait = datetime.now()
-                    avgtime, numdata = maxWaitTime
-                    newtime = (
-                        avgtime * numdata
-                        + difftime.total_seconds() // 1
-                        - ((self.nochange // 5) * 5)
-                    ) / (numdata + 1)
-                    maxWaitTime = (newtime, numdata + 1)
-                    # logger.info(f"WaitTime {difftime.total_seconds()}")
+                difftime = datetime.now() - endwait
+                endwait = datetime.now()
+                avgtime, numdata = avgwaittime
+                newtime = (avgtime * numdata + difftime.total_seconds() // 1) / (
+                    numdata + 1
+                )
+                avgwaittime = (newtime, numdata + 1)
+                master_lock.acquire()
                 if self.error >= 30:
                     logger.info(f"{self.uname}: Error found in trader {self.name}.")
                     if not self.muteerror:
@@ -568,9 +512,7 @@ class FetchLatestPosition(threading.Thread):
                     except:
                         self.error += 1
                         logger.error("Error here!")
-                        with releaseCond:
-                            toremove_queue.put(self.unique_id)
-                            releaseCond.notifyAll()
+                        master_lock.release()
                         time.sleep(75)
                         continue
                 else:
@@ -579,9 +521,7 @@ class FetchLatestPosition(threading.Thread):
                     except:
                         self.error += 1
                         logger.error("Error here 2!")
-                        with releaseCond:
-                            toremove_queue.put(self.unique_id)
-                            releaseCond.notifyAll()
+                        master_lock.release()
                         time.sleep(75)
                         continue
                 try:
@@ -590,16 +530,12 @@ class FetchLatestPosition(threading.Thread):
                     )
                 except:
                     logger.error(f"{self.uname} cannot get webpage.")
-                time.sleep(3)
+                time.sleep(1.5)
+                master_lock.release()
+                time.sleep(1.5)
                 page_source = self.driver.page_source
                 self.driver.quit()
                 self.driver = None
-                with releaseCond:
-                    toremove_queue.put(self.unique_id)
-                    # print("finishqqqqq")
-                    releaseCond.notifyAll()
-                # sleepmore = 3 if self.num_no_data > 0 else 0
-                # time.sleep(5 + sleepmore)
                 soup = BeautifulSoup(page_source, features="html.parser")
                 x = soup.get_text()
                 ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
@@ -645,7 +581,7 @@ class FetchLatestPosition(threading.Thread):
                     if self.num_no_data >= 3:
                         self.prev_df = "x"
                         self.first_run = False
-                    time.sleep(2 * self.num_no_data)
+                    time.sleep(6 * self.num_no_data)
                     diff = datetime.now() - self.changeNotiTime
                     if diff.total_seconds() / 3600 >= 24:
                         self.changeNotiTime = datetime.now()
@@ -738,7 +674,7 @@ class FetchLatestPosition(threading.Thread):
                             )
                             UserLocks[self.chat_id].release()
                 else:
-                    if self.nochange < 70:
+                    if self.nochange < 50:
                         self.nochange += 1
                     else:
                         self.nochange = 0
@@ -752,8 +688,8 @@ class FetchLatestPosition(threading.Thread):
                         chat_id=self.chat_id,
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
-                # sleeptime = random.randint(6, 21)
-                # time.sleep(sleeptime)
+                sleeptime = random.randint(40, 87)
+                time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
                 pass
@@ -763,7 +699,6 @@ class FetchLatestPosition(threading.Thread):
             chat_id=self.chat_id,
             text=f"Successfully quit following trader {self.name}.",
         )
-        del ThreadConds[self.unique_id]
 
     def stop(self):
         self.isStop.set()
@@ -1689,16 +1624,22 @@ def save_to_file(update: Update, context: CallbackContext):
 
 
 def automatic_reload():
+    i = 0
+    global avgwaittime
     while True:
-        time.sleep(60 * 60 * 3)
-        for users in CurrentUsers:
-            UserLocks[users].acquire()
-            CurrentUsers[users].bclient.reload()
-            UserLocks[users].release()
-            for traders in CurrentUsers[users].threads:
-                traders.reload()
-            time.sleep(60)
-        save_to_file(None, None)
+        time.sleep(60 * 15)
+        i += 1
+        avgwaittime = (0, 0)
+        if i % 6 == 0:
+            for users in CurrentUsers:
+                UserLocks[users].acquire()
+                CurrentUsers[users].bclient.reload()
+                UserLocks[users].release()
+                for traders in CurrentUsers[users].threads:
+                    traders.reload()
+                time.sleep(60)
+            save_to_file(None, None)
+            i = 0
 
 
 def set_all_leverage(update: Update, context: CallbackContext):
@@ -2779,15 +2720,6 @@ def check_balance(update: Update, context: CallbackContext):
     return
 
 
-def check_waittime(update: Update, context: CallbackContext):
-    if not update.message.chat_id in CurrentUsers:
-        update.message.reply_text("Please initalize with /start first.")
-    update.message.reply_text(
-        f"The current average update interval is {maxWaitTime[0]:.2f} seconds."
-    )
-    return
-
-
 def close_position(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
@@ -2824,6 +2756,15 @@ def conf_symbol(update: Update, context: CallbackContext):
         return CP1
     user.bclient.close_position(update.message.text)
     return ConversationHandler.END
+
+
+def check_waittime(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+    update.message.reply_text(
+        f"The current average update interval is {avgwaittime[0]:.2f} seconds."
+    )
+    return
 
 
 class AAXClient:
@@ -3513,10 +3454,7 @@ class BybitClient:
                         checkside = "Buy" if result["side"] == "Sell" else "Sell"
                         for pos in res:
                             logger.info(str(pos))
-                            if (
-                                pos["side"] == checkside
-                                and float(pos["size"]) == 0
-                            ):
+                            if pos["side"] == checkside and float(pos["size"]) == 0:
                                 CurrentUsers[self.chat_id].threads[idx].positions[
                                     positionKey
                                 ] = 0
@@ -4983,14 +4921,13 @@ def main() -> None:
     # chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tp=None,sl=None,tmode=None,lmode=None):
     # for x in userdata:
     #     updater.bot.sendMessage(chat_id=x["chat_id"],text="Hi, back online again. You should start receiving notifications now. Remember to change necessary settings.")
-    t1 = threading.Thread(target=automatic_reload)
-    t1.start()
-    t2 = threading.Thread(target=RunningThreadManager)
-    t2.start()
     try:
         restore_save_data()
     except:
         logger.info("No data to restore.")
+    t1 = threading.Thread(target=automatic_reload)
+    t1.start()
+
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
