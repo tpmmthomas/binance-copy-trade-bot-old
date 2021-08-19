@@ -25,7 +25,9 @@ import math
 import random
 import bybit
 import hmac, hashlib, time, requests
-
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import urllib3
 import urllib
 import queue
@@ -194,7 +196,7 @@ def RunningThreadManager():
         if diff.total_seconds() >= 900:
             starttime = datetime.now()
             maxWaitTime = (0, 0)
-        while toremove_queue.empty() and len(running_threads) >= 2:
+        while toremove_queue.empty() and len(running_threads) >= 3:
             with releaseCond:
                 # logger.info("waitingng!")
                 releaseCond.wait(timeout=30)
@@ -202,7 +204,7 @@ def RunningThreadManager():
             # logger.info("removing!")
             cid = toremove_queue.get()
             running_threads.remove(cid)
-        if len(running_threads) < 2 and not waiting_queue.empty():
+        if len(running_threads) < 3 and not waiting_queue.empty():
             # logger.info("hsd")
             cid = waiting_queue.get()
             with ThreadConds[cid]:
@@ -577,7 +579,12 @@ class FetchLatestPosition(threading.Thread):
                             releaseCond.notifyAll()
                         time.sleep(75)
                         continue
-                time.sleep(4)
+                try:
+                    WebDriverWait(self.driver, 4).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "thead"))
+                    )
+                except:
+                    logger.error(f"{self.uname} cannot get webpage.")
                 page_source = self.driver.page_source
                 self.driver.quit()
                 self.driver = None
