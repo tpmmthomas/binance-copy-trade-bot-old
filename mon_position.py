@@ -188,10 +188,13 @@ def RunningThreadManager():
     running_threads = []
     i = 0
     global maxWaitTime
-    print("start!")
+    # print("start!")
     time.sleep(5)
     starttime = datetime.now()
     while True:
+        if i >= 100:
+            time.sleep(5)
+            i = 0
         diff = datetime.now() - starttime
         if diff.total_seconds() >= 900:
             starttime = datetime.now()
@@ -210,7 +213,7 @@ def RunningThreadManager():
             with ThreadConds[cid]:
                 ThreadConds[cid].notifyAll()
             running_threads.append(cid)
-        i += 1
+            i += 1
 
 
 class Auth(requests.auth.AuthBase):
@@ -539,13 +542,15 @@ class FetchLatestPosition(threading.Thread):
                         toremove_queue.put(self.unique_id)
                         releaseCond.notifyAll()
                     continue
-                else:
+                elif self.error == 0:
                     difftime = datetime.now() - endwait
                     endwait = datetime.now()
                     avgtime, numdata = maxWaitTime
-                    newtime = (avgtime * numdata + difftime.total_seconds() // 1) / (
-                        numdata + 1
-                    )
+                    newtime = (
+                        avgtime * numdata
+                        + difftime.total_seconds() // 1
+                        - ((self.nochange // 5) * 5)
+                    ) / (numdata + 1)
                     maxWaitTime = (newtime, numdata + 1)
                     # logger.info(f"WaitTime {difftime.total_seconds()}")
                 if self.error >= 30:
