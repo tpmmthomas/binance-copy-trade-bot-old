@@ -692,6 +692,21 @@ class FetchLatestPosition(threading.Thread):
                 time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
+                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Error found in {self.uname},automatically restarting.")
+                idx = CurrentUsers[self.chat_id].trader_names.index()
+                CurrentUsers[self.chat_id].restore_trader(
+                    CurrentUsers[self.chat_id].trader_urls[idx],
+                    self.name,
+                    self.toTrade,
+                    self.take_profit_percent,
+                    self.stop_loss_percent,
+                    self.tmodes,
+                    self.lmode,
+                    self.proportion,
+                    self.leverage,
+                    self.positions,
+                )
+                CurrentUsers[self.chat_id].delete_trader(idx)
                 pass
         if self.driver is not None:
             self.driver.quit()
