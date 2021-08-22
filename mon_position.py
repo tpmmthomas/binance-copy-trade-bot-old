@@ -2767,6 +2767,307 @@ def check_waittime(update: Update, context: CallbackContext):
     return
 
 
+def error_callback(update, context, error):
+    logger.error("Error!!!!!Why!!!")
+    time.sleep(5)
+    t1 = threading.Thread(target=reload_updater)
+    t1.start()
+
+def reload_updater():
+    global updater
+    updater.stop()
+    updater.is_idle = False
+    time.sleep(2)
+    updater2 = Updater(cnt.bot_token)
+    dispatcher = updater2.dispatcher
+    # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            AUTH: [MessageHandler(Filters.text & ~Filters.command, auth_check)],
+            DISCLAIMER: [MessageHandler(Filters.regex("^(yes)$"), disclaimer_check)],
+            PLATFORM: [MessageHandler(Filters.regex("^(1|2|3)$"), check_platform)],
+            APIKEY: [MessageHandler(Filters.text & ~Filters.command, check_api)],
+            APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
+            SAFERATIO: [MessageHandler(Filters.text & ~Filters.command, check_ratio)],
+            TRADERURL: [MessageHandler(Filters.text, url_check)],
+            TOTRADE: [MessageHandler(Filters.regex("^(yes|no)$"), trade_confirm)],
+            TMODE: [MessageHandler(Filters.regex("^(0|1|2)$"), tmode_confirm)],
+            LMODE: [MessageHandler(Filters.regex("^(0|1|2)$"), lmode_confirm)],
+            TP: [MessageHandler(Filters.text & ~Filters.command, tp_confirm)],
+            SL: [MessageHandler(Filters.text & ~Filters.command, sl_confirm)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler2 = ConversationHandler(
+        entry_points=[CommandHandler("add", add_trader)],
+        states={
+            TRADERURL2: [MessageHandler(Filters.text & ~Filters.command, url_add)],
+            TOTRADE: [MessageHandler(Filters.regex("^(yes|no)$"), trade_confirm)],
+            TMODE: [MessageHandler(Filters.regex("^(0|1|2)$"), tmode_confirm)],
+            LMODE: [MessageHandler(Filters.regex("^(0|1|2)$"), lmode_confirm)],
+            TP: [MessageHandler(Filters.text & ~Filters.command, tp_confirm)],
+            SL: [MessageHandler(Filters.text & ~Filters.command, sl_confirm)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler3 = ConversationHandler(
+        entry_points=[CommandHandler("delete", delete_trader)],
+        states={
+            TRADERNAME: [MessageHandler(Filters.text & ~Filters.command, delTrader)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler4 = ConversationHandler(
+        entry_points=[CommandHandler("admin", admin)],
+        states={
+            AUTH2: [MessageHandler(Filters.text & ~Filters.command, auth_check2)],
+            ANNOUNCE: [
+                MessageHandler(Filters.text & ~Filters.command, announce),
+                CommandHandler("save", save_to_file),
+                CommandHandler("endall", end_everyone),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler5 = ConversationHandler(
+        entry_points=[CommandHandler("view", view_trader)],
+        states={
+            VIEWTRADER: [
+                MessageHandler(Filters.text & ~Filters.command, view_traderInfo)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler6 = ConversationHandler(
+        entry_points=[CommandHandler("setallleverage", set_all_leverage)],
+        states={
+            ALLLEV: [MessageHandler(Filters.text & ~Filters.command, setAllLeverage)],
+            REALSETLEV: [
+                MessageHandler(Filters.text & ~Filters.command, setAllLeverageReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler7 = ConversationHandler(
+        entry_points=[CommandHandler("setleverage", set_leverage)],
+        states={
+            LEVTRADER: [
+                MessageHandler(Filters.text & ~Filters.command, leverage_choosetrader)
+            ],
+            LEVSYM: [
+                MessageHandler(Filters.text & ~Filters.command, leverage_choosesymbol)
+            ],
+            REALSETLEV2: [
+                MessageHandler(Filters.text & ~Filters.command, setLeverageReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler8 = ConversationHandler(
+        entry_points=[CommandHandler("setallproportion", set_all_proportion)],
+        states={
+            ALLPROP: [
+                MessageHandler(Filters.text & ~Filters.command, setAllProportion)
+            ],
+            REALSETPROP: [
+                MessageHandler(Filters.text & ~Filters.command, setAllProportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler9 = ConversationHandler(
+        entry_points=[CommandHandler("setproportion", set_proportion)],
+        states={
+            PROPTRADER: [
+                MessageHandler(Filters.text & ~Filters.command, proportion_choosetrader)
+            ],
+            PROPSYM: [
+                MessageHandler(Filters.text & ~Filters.command, proportion_choosesymbol)
+            ],
+            REALSETPROP2: [
+                MessageHandler(Filters.text & ~Filters.command, setProportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler10 = ConversationHandler(
+        entry_points=[CommandHandler("getleverage", get_leverage)],
+        states={
+            LEVTRADER2: [
+                MessageHandler(
+                    Filters.text & ~Filters.command, getleverage_choosetrader
+                )
+            ],
+            REALSETLEV3: [
+                MessageHandler(Filters.text & ~Filters.command, getLeverageReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler11 = ConversationHandler(
+        entry_points=[CommandHandler("getproportion", get_proportion)],
+        states={
+            LEVTRADER3: [
+                MessageHandler(
+                    Filters.text & ~Filters.command, getproportion_choosetrader
+                )
+            ],
+            REALSETLEV4: [
+                MessageHandler(Filters.text & ~Filters.command, getproportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler12 = ConversationHandler(
+        entry_points=[CommandHandler("end", end_all)],
+        states={COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],},
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler13 = ConversationHandler(
+        entry_points=[CommandHandler("settmode", set_omode)],
+        states={
+            PROPTRADER2: [
+                MessageHandler(Filters.text & ~Filters.command, omode_choosetrader)
+            ],
+            PROPSYM2: [
+                MessageHandler(Filters.text & ~Filters.command, omode_choosesymbol)
+            ],
+            REALSETPROP3: [MessageHandler(Filters.regex("^(0|1|2)$"), setomodeReal)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler14 = ConversationHandler(
+        entry_points=[CommandHandler("setlmode", set_lmode)],
+        states={
+            LEVTRADER4: [
+                MessageHandler(Filters.text & ~Filters.command, setlmode_choosetrader)
+            ],
+            REALSETLEV5: [MessageHandler(Filters.regex("^(0|1|2)$"), setlmodeReal)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler15 = ConversationHandler(
+        entry_points=[CommandHandler("setalltmode", set_allomode)],
+        states={
+            LEVTRADER5: [
+                MessageHandler(Filters.text & ~Filters.command, allomode_choosetrader)
+            ],
+            REALSETLEV6: [MessageHandler(Filters.regex("^(0|1|2)$"), setallomodeReal)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler16 = ConversationHandler(
+        entry_points=[CommandHandler("changesr", change_safetyratio)],
+        states={
+            LEVTRADER6: [
+                MessageHandler(Filters.text & ~Filters.command, confirm_changesafety)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    conv_handler17 = ConversationHandler(
+        entry_points=[CommandHandler("setalltpsl", set_all_tpsl)],
+        states={
+            ALLPROP2: [MessageHandler(Filters.text & ~Filters.command, setAllTpsl)],
+            REALSETPROP4: [
+                MessageHandler(Filters.text & ~Filters.command, setAllTpslReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler18 = ConversationHandler(
+        entry_points=[CommandHandler("settpsl", set_tpsl)],
+        states={
+            PROPTRADER3: [
+                MessageHandler(Filters.text & ~Filters.command, tpsl_choosetrader)
+            ],
+            PROPSYM3: [
+                MessageHandler(Filters.text & ~Filters.command, tpsl_choosesymbol)
+            ],
+            REALSETPROP5: [
+                MessageHandler(Filters.text & ~Filters.command, setTpslReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler19 = ConversationHandler(
+        entry_points=[CommandHandler("gettpsl", get_tpsl)],
+        states={
+            LEVTRADER7: [
+                MessageHandler(Filters.text & ~Filters.command, gettpsl_choosetrader)
+            ],
+            REALSETLEV7: [MessageHandler(Filters.text & ~Filters.command, getTpslReal)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler20 = ConversationHandler(
+        entry_points=[CommandHandler("mute", mute_trader)],
+        states={
+            MUTE1: [MessageHandler(Filters.text & ~Filters.command, mute_choosetrader)],
+            MUTE3: [MessageHandler(Filters.regex("^(1|2|3|4)$"), mute_choosemode)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler21 = ConversationHandler(
+        entry_points=[CommandHandler("unmute", unmute_trader)],
+        states={
+            MUTE2: [
+                MessageHandler(Filters.text & ~Filters.command, unmute_choosetrader)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler22 = ConversationHandler(
+        entry_points=[CommandHandler("changeapi", choose_platform)],
+        states={
+            SEP3: [MessageHandler(Filters.regex("^(1|2|3)$"), change_api)],
+            SEP1: [MessageHandler(Filters.text & ~Filters.command, change_secret)],
+            SEP2: [MessageHandler(Filters.text & ~Filters.command, change_bnall)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler23 = ConversationHandler(
+        entry_points=[CommandHandler("closeposition", close_position)],
+        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    dispatcher.add_handler(conv_handler)
+    dispatcher.add_handler(conv_handler2)
+    dispatcher.add_handler(conv_handler3)
+    dispatcher.add_handler(conv_handler4)
+    dispatcher.add_handler(conv_handler5)
+    dispatcher.add_handler(conv_handler6)
+    dispatcher.add_handler(conv_handler7)
+    dispatcher.add_handler(conv_handler8)
+    dispatcher.add_handler(conv_handler9)
+    dispatcher.add_handler(conv_handler10)
+    dispatcher.add_handler(conv_handler11)
+    dispatcher.add_handler(conv_handler12)
+    dispatcher.add_handler(conv_handler13)
+    dispatcher.add_handler(conv_handler14)
+    dispatcher.add_handler(conv_handler15)
+    dispatcher.add_handler(conv_handler16)
+    dispatcher.add_handler(conv_handler17)
+    dispatcher.add_handler(conv_handler18)
+    dispatcher.add_handler(conv_handler19)
+    dispatcher.add_handler(conv_handler20)
+    dispatcher.add_handler(conv_handler21)
+    dispatcher.add_handler(conv_handler22)
+    dispatcher.add_handler(conv_handler23)
+    dispatcher.add_handler(CommandHandler("help", help_command))
+    dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
+    dispatcher.add_error_handler(error_callback)
+    updater = updater2
+    updater.start_polling()
+    # Run the bot until you press Ctrl-C or the process receives SIGINT,
+    # SIGTERM or SIGABRT. This should be used most of the time, since
+    # start_polling() is non-blocking and will stop the bot gracefully.
+    updater.idle()
+
+
 class AAXClient:
     def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
         self.auth = Auth(api_key, api_secret)
@@ -3725,7 +4026,7 @@ class BybitClient:
             else:
                 try:
                     target_price = float(target_price)
-                    if positionSide == "LONG":
+                    if side == "Buy":
                         target_price = min(latest_price, target_price)
                     else:
                         target_price = max(latest_price, target_price)
@@ -4353,7 +4654,7 @@ class BinanceClient:
             else:
                 try:
                     target_price = float(target_price)
-                    if positionSide == "LONG":
+                    if side == "BUY":
                         target_price = min(latest_price, target_price)
                     else:
                         target_price = max(latest_price, target_price)
@@ -4912,6 +5213,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
+    dispatcher.add_error_handler(error_callback)
     # TODO: add /end command
     # Start the Bot
     # chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None)
