@@ -692,8 +692,11 @@ class FetchLatestPosition(threading.Thread):
                 time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
-                updater.bot.sendMessage(chat_id=self.chat_id,text=f"Error found in {self.uname},automatically restarting.")
-                idx = CurrentUsers[self.chat_id].trader_names.index()
+                updater.bot.sendMessage(
+                    chat_id=self.chat_id,
+                    text=f"Error found in {self.name},automatically restarting.",
+                )
+                idx = CurrentUsers[self.chat_id].trader_names.index(self.name)
                 CurrentUsers[self.chat_id].restore_trader(
                     CurrentUsers[self.chat_id].trader_urls[idx],
                     self.name,
@@ -4566,7 +4569,7 @@ class BinanceClient:
             quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
             checkKey = tradeinfo[1].upper() + positionSide
             if not isOpen and (
-                (checkKey not in positions) or (positions[checkKey] < quant)
+                (checkKey not in positions) or (positions[checkKey] < quant) or positions[checkKey] == 0
             ):
                 if checkKey not in positions or positions[checkKey] == 0:
                     if not mute:
