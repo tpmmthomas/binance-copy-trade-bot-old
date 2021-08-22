@@ -1558,8 +1558,6 @@ def realEndAll(update: Update, context: CallbackContext):
 
 def end_everyone(update: Update, context: CallbackContext):
     for user in CurrentUsers:
-        if user == update.message.chat_id:
-            continue
         user = CurrentUsers[user]
         for thread in user.threads:
             thread.stop()
@@ -2768,10 +2766,19 @@ def check_waittime(update: Update, context: CallbackContext):
 
 
 def error_callback(update, context, error):
-    logger.error("Error!!!!!Why!!!")
+    logger.error("Error!!!!!Why!!!" + str(error))
     time.sleep(5)
+    save_to_file(None, None)
+    for user in CurrentUsers:
+        user = CurrentUsers[user]
+        for thread in user.threads:
+            thread.stop()
+        updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
+        del CurrentUsers[user]
+    logger.info("Everyone's service has ended.")
     t1 = threading.Thread(target=reload_updater)
     t1.start()
+
 
 def reload_updater():
     global updater
@@ -3061,6 +3068,10 @@ def reload_updater():
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
     dispatcher.add_error_handler(error_callback)
     updater = updater2
+    try:
+        restore_save_data()
+    except:
+        logger.info("No data to restore.")
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
