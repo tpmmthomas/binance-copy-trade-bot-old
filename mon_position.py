@@ -201,6 +201,86 @@ class Auth(requests.auth.AuthBase):
         return request
 
 
+class WebScraping(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.num_dos = {}
+        self.result = {}
+        self.driver = webdriver.Chrome(cfg.driver_location, options=options)
+        self.i = 0
+        self.isStop = threading.Event()
+        # self.thislock = threading.Lock()
+
+    def run(self):
+        global avgwaittime
+        while not self.isStop.is_set():
+            # try:
+            start = datetime.now()
+            numdo = self.num_dos.copy()
+            # self.thislock.acquire()
+            urls = numdo.keys()
+            # self.thislock.release()
+            for url in urls:
+                try:
+                    self.driver.get(url)
+                except:
+                    logger.error("cannot fetch url")
+                    continue
+                try:
+                    WebDriverWait(self.driver, 4).until(
+                        EC.presence_of_element_located((By.TAG_NAME, "thead"))
+                    )
+                except:
+                    logger.error(f"{self.uname} cannot get webpage.")
+                    continue
+                time.sleep(3)
+                page_source = self.driver.page_source
+                self.result[url] = page_source
+            ttime = datetime.now() - start
+            avgwaittime = (ttime.total_seconds(), len(urls))
+            self.i += 1
+            if self.i >= 60:
+                self.driver.quit()
+                self.driver = None
+                time.sleep(6)
+                self.driver = webdriver.Chrome(cfg.driver_location, options=options)
+                self.i = 0
+            # except:
+            #     logger.error("Oh no uncaught problem")
+            #     self.driver.quit()
+            #     self.driver = None
+            #     time.sleep(6)
+            #     self.driver = webdriver.Chrome(cfg.driver_location, options=options)
+
+    def stop(self):
+        self.isStop.set()
+
+    def add(self, url):
+        # self.thislock.acquire()
+        if not url in self.num_dos:
+            self.num_dos[url] = 1
+        else:
+            self.num_dos[url] += 1
+        # self.thislock.release()
+        return
+
+    def remove(self, url):
+        # self.thislock.acquire()
+        if not url in self.num_dos:
+            return
+        if self.num_dos[url] == 1:
+            del self.num_dos[url]
+            if url in self.result:
+                del self.result[url]
+        else:
+            self.num_dos[url] -= 1
+        # self.thislock.release()
+        return
+
+
+web_scraper = WebScraping()
+
+
 class FetchLatestPosition(threading.Thread):
     def __init__(
         self,
@@ -227,7 +307,6 @@ class FetchLatestPosition(threading.Thread):
         self.name = name
         self.nochange = 0
         self.uname = uname
-        self.driver = None
         self.first_run = True
         self.error = 0
         self.toTrade = toTrade
@@ -241,6 +320,7 @@ class FetchLatestPosition(threading.Thread):
         self.mutetrade = False
         self.lastPosTime = datetime.now() + timedelta(hours=8)
         self.changeNotiTime = datetime.now()
+        web_scraper.add(self.fetch_url)
         if self.positions is None:
             self.positions = {}
         if isinstance(tmode, int):
@@ -482,60 +562,23 @@ class FetchLatestPosition(threading.Thread):
 
     def run(self):
         logger.info("%s starting %s", self.uname, self.name)
-        global avgwaittime
-        endwait = datetime.now()
         while not self.isStop.is_set():
             try:
                 isChanged = False
                 time.sleep(self.error * 5.5)
                 time.sleep((self.nochange // 5) * 5)
-                difftime = datetime.now() - endwait
-                endwait = datetime.now()
-                avgtime, numdata = avgwaittime
-                newtime = (avgtime * numdata + difftime.total_seconds() // 1) / (
-                    numdata + 1
-                )
-                avgwaittime = (newtime, numdata + 1)
-                master_lock.acquire()
                 if self.error >= 30:
                     logger.info(f"{self.uname}: Error found in trader {self.name}.")
                     if not self.muteerror:
                         tosend = f"Hi, it seems that our bot is not able to check {self.name}'s position. This might be due to the trader decided to stop sharing or a bug in our bot. Please /delete this trader and report to us if you think it's a bug.\nIt is possible that you keep following this trader in case their positions open again, but you will keep receiving error messages until then."
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
                     self.error = 0
-                if self.driver is None:
-                    try:
-                        self.driver = webdriver.Chrome(
-                            cfg.driver_location, options=options
-                        )
-                        self.driver.get(self.fetch_url)
-                    except:
-                        self.error += 1
-                        logger.error("Error here!")
-                        master_lock.release()
-                        time.sleep(75)
-                        continue
-                else:
-                    try:
-                        self.driver.refresh()
-                    except:
-                        self.error += 1
-                        logger.error("Error here 2!")
-                        master_lock.release()
-                        time.sleep(75)
-                        continue
                 try:
-                    WebDriverWait(self.driver, 4).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "thead"))
-                    )
+                    page_source = web_scraper.result[self.fetch_url]
                 except:
-                    logger.error(f"{self.uname} cannot get webpage.")
-                time.sleep(1.5)
-                master_lock.release()
-                time.sleep(1.5)
-                page_source = self.driver.page_source
-                self.driver.quit()
-                self.driver = None
+                    logger.error(f"No result for {self.name}.")
+                    self.error += 1
+                    continue
                 soup = BeautifulSoup(page_source, features="html.parser")
                 x = soup.get_text()
                 ### THIS PART IS ACCORDING TO THE CURRENT WEBPAGE DESIGN WHICH MIGHT BE CHANGED
@@ -674,7 +717,7 @@ class FetchLatestPosition(threading.Thread):
                             )
                             UserLocks[self.chat_id].release()
                 else:
-                    if self.nochange < 50:
+                    if self.nochange < 20:
                         self.nochange += 1
                     else:
                         self.nochange = 0
@@ -688,7 +731,9 @@ class FetchLatestPosition(threading.Thread):
                         chat_id=self.chat_id,
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
-                sleeptime = random.randint(40, 87)
+                sleeptime = random.randint(
+                    int(max(0, avgwaittime[0] - 10)), int(max(0, avgwaittime[0] + 10))
+                )
                 time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
@@ -711,8 +756,7 @@ class FetchLatestPosition(threading.Thread):
                 )
                 CurrentUsers[self.chat_id].delete_trader(idx)
                 pass
-        if self.driver is not None:
-            self.driver.quit()
+        web_scraper.remove(self.fetch_url)
         updater.bot.sendMessage(
             chat_id=self.chat_id,
             text=f"Successfully quit following trader {self.name}.",
@@ -1640,22 +1684,16 @@ def save_to_file(update: Update, context: CallbackContext):
 
 
 def automatic_reload():
-    i = 0
-    global avgwaittime
     while True:
-        time.sleep(60 * 15)
-        i += 1
-        avgwaittime = (0, 0)
-        if i % 6 == 0:
-            for users in CurrentUsers:
-                UserLocks[users].acquire()
-                CurrentUsers[users].bclient.reload()
-                UserLocks[users].release()
-                for traders in CurrentUsers[users].threads:
-                    traders.reload()
-                time.sleep(60)
-            save_to_file(None, None)
-            i = 0
+        time.sleep(60 * 60 * 1.5)
+        for users in CurrentUsers:
+            UserLocks[users].acquire()
+            CurrentUsers[users].bclient.reload()
+            UserLocks[users].release()
+            for traders in CurrentUsers[users].threads:
+                traders.reload()
+            time.sleep(60)
+        save_to_file(None, None)
 
 
 def set_all_leverage(update: Update, context: CallbackContext):
@@ -4569,7 +4607,9 @@ class BinanceClient:
             quant = abs(tradeinfo[2]) * proportion[tradeinfo[1]]
             checkKey = tradeinfo[1].upper() + positionSide
             if not isOpen and (
-                (checkKey not in positions) or (positions[checkKey] < quant) or positions[checkKey] == 0
+                (checkKey not in positions)
+                or (positions[checkKey] < quant)
+                or positions[checkKey] == 0
             ):
                 if checkKey not in positions or positions[checkKey] == 0:
                     if not mute:
@@ -5243,6 +5283,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
     dispatcher.add_error_handler(error_callback)
+    web_scraper.start()
     # TODO: add /end command
     # Start the Bot
     # chat_id,uname,safety_ratio,init_trader,trader_name,api_key,api_secret,toTrade,tmode=None,lmode=None)
