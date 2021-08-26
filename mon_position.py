@@ -624,7 +624,10 @@ class FetchLatestPosition(threading.Thread):
                     if self.num_no_data >= 3:
                         self.prev_df = "x"
                         self.first_run = False
-                    time.sleep(6 * self.num_no_data)
+                    sleeptime = random.randint(
+                        int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
+                    )
+                    time.sleep(sleeptime)
                     diff = datetime.now() - self.changeNotiTime
                     if diff.total_seconds() / 3600 >= 24:
                         self.changeNotiTime = datetime.now()
@@ -732,7 +735,7 @@ class FetchLatestPosition(threading.Thread):
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
                 sleeptime = random.randint(
-                    int(max(0, avgwaittime[0] - 10)), int(max(0, avgwaittime[0] + 5))
+                    int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
                 )
                 time.sleep(sleeptime)
             except:
