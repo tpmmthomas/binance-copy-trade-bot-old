@@ -214,43 +214,43 @@ class WebScraping(threading.Thread):
     def run(self):
         global avgwaittime
         while not self.isStop.is_set():
-            # try:
-            start = datetime.now()
-            numdo = self.num_dos.copy()
-            # self.thislock.acquire()
-            urls = numdo.keys()
-            # self.thislock.release()
-            for url in urls:
-                try:
-                    self.driver.get(url)
-                except:
-                    logger.error("cannot fetch url")
-                    continue
-                try:
-                    WebDriverWait(self.driver, 4).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "thead"))
-                    )
-                except:
-                    logger.error(f"{self.uname} cannot get webpage.")
-                    continue
-                time.sleep(3)
-                page_source = self.driver.page_source
-                self.result[url] = page_source
-            ttime = datetime.now() - start
-            avgwaittime = (ttime.total_seconds(), len(urls))
-            self.i += 1
-            if self.i >= 60:
+            try:
+                start = datetime.now()
+                numdo = self.num_dos.copy()
+                # self.thislock.acquire()
+                urls = numdo.keys()
+                # self.thislock.release()
+                for url in urls:
+                    try:
+                        self.driver.get(url)
+                    except:
+                        logger.error("cannot fetch url")
+                        continue
+                    try:
+                        WebDriverWait(self.driver, 4).until(
+                            EC.presence_of_element_located((By.TAG_NAME, "thead"))
+                        )
+                    except:
+                        logger.error(f"{self.uname} cannot get webpage.")
+                        continue
+                    time.sleep(3)
+                    page_source = self.driver.page_source
+                    self.result[url] = page_source
+                ttime = datetime.now() - start
+                avgwaittime = (ttime.total_seconds(), len(urls))
+                self.i += 1
+                if self.i >= 60:
+                    self.driver.quit()
+                    self.driver = None
+                    time.sleep(6)
+                    self.driver = webdriver.Chrome(cfg.driver_location, options=options)
+                    self.i = 0
+            except:
+                logger.error("Oh no uncaught problem")
                 self.driver.quit()
                 self.driver = None
                 time.sleep(6)
                 self.driver = webdriver.Chrome(cfg.driver_location, options=options)
-                self.i = 0
-            # except:
-            #     logger.error("Oh no uncaught problem")
-            #     self.driver.quit()
-            #     self.driver = None
-            #     time.sleep(6)
-            #     self.driver = webdriver.Chrome(cfg.driver_location, options=options)
 
     def stop(self):
         self.isStop.set()
@@ -732,7 +732,7 @@ class FetchLatestPosition(threading.Thread):
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
                 sleeptime = random.randint(
-                    int(max(0, avgwaittime[0] - 10)), int(max(0, avgwaittime[0] + 10))
+                    int(max(0, avgwaittime[0] - 10)), int(max(0, avgwaittime[0] + 5))
                 )
                 time.sleep(sleeptime)
             except:
