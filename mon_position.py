@@ -365,6 +365,7 @@ class FetchLatestPosition(threading.Thread):
                     self.take_profit_percent[symbol] = tp
                 if self.needsl:
                     self.stop_loss_percent[symbol] = sl
+        self.reload()
 
     def get_trader_profile(self):
         if self.toTrade:
@@ -3769,7 +3770,7 @@ class BybitClient:
                     symbol=symbol, order_id=orderId
                 ).result()[0]
                 if result["ret_msg"] != "OK":
-                    logger.error("There is an error!")
+                    logger.error(f"There is an error! {result['ret_msg']}")
                     return
                 result = result["result"]
                 if result["order_status"] == "Filled":
