@@ -209,6 +209,7 @@ class WebScraping(threading.Thread):
         self.driver = webdriver.Chrome(cfg.driver_location, options=options)
         self.i = 0
         self.isStop = threading.Event()
+        self.cond = {}
         # self.thislock = threading.Lock()
 
     def run(self):
@@ -236,6 +237,8 @@ class WebScraping(threading.Thread):
                     time.sleep(3)
                     page_source = self.driver.page_source
                     self.result[url] = page_source
+                    with self.cond[url]:
+                        self.cond[url].notify_all()
                 ttime = datetime.now() - start
                 avgwaittime = (ttime.total_seconds(), len(urls))
                 self.i += 1
@@ -259,6 +262,7 @@ class WebScraping(threading.Thread):
         # self.thislock.acquire()
         if not url in self.num_dos:
             self.num_dos[url] = 1
+            self.cond[url] = threading.Condition()
         else:
             self.num_dos[url] += 1
         # self.thislock.release()
@@ -270,6 +274,7 @@ class WebScraping(threading.Thread):
             return
         if self.num_dos[url] == 1:
             del self.num_dos[url]
+            del self.cond[url]
             if url in self.result:
                 del self.result[url]
         else:
@@ -574,6 +579,12 @@ class FetchLatestPosition(threading.Thread):
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
                     self.error = 0
                 try:
+                    with web_scraper.cond[self.fetch_url]:
+                        web_scraper.cond[self.fetch_url].wait(300)
+                except:
+                    logger.error(f"Timeout for {self.name}.")
+                    continue
+                try:
                     page_source = web_scraper.result[self.fetch_url]
                 except:
                     logger.error(f"No result for {self.name}.")
@@ -624,10 +635,10 @@ class FetchLatestPosition(threading.Thread):
                     if self.num_no_data >= 3:
                         self.prev_df = "x"
                         self.first_run = False
-                    sleeptime = random.randint(
-                        int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
-                    )
-                    time.sleep(sleeptime)
+                    # sleeptime = random.randint(
+                    #     int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
+                    # )
+                    # time.sleep(sleeptime)
                     diff = datetime.now() - self.changeNotiTime
                     if diff.total_seconds() / 3600 >= 24:
                         self.changeNotiTime = datetime.now()
@@ -734,10 +745,10 @@ class FetchLatestPosition(threading.Thread):
                         chat_id=self.chat_id,
                         text=f"Trader {self.name}: 24 hours no position update.",
                     )
-                sleeptime = random.randint(
-                    int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
-                )
-                time.sleep(sleeptime)
+                # sleeptime = random.randint(
+                #     int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
+                # )
+                # time.sleep(sleeptime)
             except:
                 logger.error("Some uncaught error! Oh no.")
                 updater.bot.sendMessage(
@@ -1629,6 +1640,7 @@ def end_everyone(update: Update, context: CallbackContext):
         updater.bot.sendMessage(
             chat_id=user.chat_id, text="Your service has been force ended by admin."
         )
+    web_scraper.stop()
     logger.info("Everyone's service has ended.")
     return ConversationHandler.END
 
