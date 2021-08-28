@@ -2837,8 +2837,8 @@ def check_waittime(update: Update, context: CallbackContext):
     return
 
 
-def error_callback(update, context, error):
-    logger.error("Error!!!!!Why!!!" + str(error))
+def error_callback(update, context):
+    logger.error("Error!!!!!Why!!!")
     time.sleep(5)
     save_to_file(None, None)
     for user in CurrentUsers:
