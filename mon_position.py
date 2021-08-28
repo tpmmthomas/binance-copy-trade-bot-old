@@ -365,7 +365,6 @@ class FetchLatestPosition(threading.Thread):
                     self.take_profit_percent[symbol] = tp
                 if self.needsl:
                     self.stop_loss_percent[symbol] = sl
-        self.reload()
 
     def get_trader_profile(self):
         if self.toTrade:
@@ -5011,6 +5010,8 @@ def restore_save_data():
                     x["profiles"][i]["leverage"],
                     x["profiles"][i]["positions"],
                 )
+        for trader in CurrentUsers[x["chat_id"]].threads:
+            trader.reload()
     return
 
 
