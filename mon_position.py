@@ -237,8 +237,9 @@ class WebScraping(threading.Thread):
                     time.sleep(3)
                     page_source = self.driver.page_source
                     self.result[url] = page_source
-                    with self.cond[url]:
-                        self.cond[url].notify_all()
+                    if url in self.cond:
+                        with self.cond[url]:
+                            self.cond[url].notify_all()
                 ttime = datetime.now() - start
                 avgwaittime = (ttime.total_seconds(), len(urls))
                 self.i += 1
