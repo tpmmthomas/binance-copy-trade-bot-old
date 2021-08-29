@@ -842,6 +842,8 @@ class FetchLatestPosition(threading.Thread):
                     chat_id=self.chat_id,
                     text=f"Please note that trader {self.name} has changed its name to {newname}.",
                 )
+                idx = CurrentUsers[self.chat_id].trader_names.index(self.name)
+                CurrentUsers[self.chat_id].trader_names[idx] = newname
                 self.name = newname
 
     def manualclose(self):
