@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 (
     AUTH,
+    CLOSEALL,
     SEP1,
     SEP2,
     COCO,
@@ -94,7 +95,7 @@ logger = logging.getLogger(__name__)
     SEP3,
     CP1,
     PLATFORM,
-) = range(54)
+) = range(55)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 master_lock = threading.Semaphore(2)
@@ -326,6 +327,7 @@ class FetchLatestPosition(threading.Thread):
         self.mutetrade = False
         self.lastPosTime = datetime.now() + timedelta(hours=8)
         self.changeNotiTime = datetime.now()
+        self.lastchecktime = None
         web_scraper.add(self.fetch_url)
         if self.positions is None:
             self.positions = {}
@@ -394,6 +396,10 @@ class FetchLatestPosition(threading.Thread):
         txsymbol = []
         txsize = []
         executePrice = []
+        if (isinstance(df, str) or df is None) and (
+            isinstance(df2, str) or df2 is None
+        ):
+            return None
         if isinstance(df, str):
             for index, row in df2.iterrows():
                 size = row["size"]
@@ -825,6 +831,40 @@ class FetchLatestPosition(threading.Thread):
         self.tmodes = secondtmodes
         self.take_profit_percent = secondtp
         self.stop_loss_percent = secondsl
+        diff = None
+        if not self.lastchecktime is None:
+            diff = datetime.now() - self.lastchecktime
+        if diff is None or diff.total_seconds() / 3600 >= 24:
+            self.lastchecktime = datetime.now()
+            newname = retrieveUserName(self.fetch_url)
+            if newname != self.name:
+                updater.bot.sendMessage(
+                    chat_id=self.chat_id,
+                    text=f"Please note that trader {self.name} has changed its name to {newname}.",
+                )
+                self.name = newname
+
+    def manualclose(self):
+        txlist = self.changes(self.prev_df, "x")
+        if not txlist is None and self.toTrade:
+            UserLocks[self.chat_id].acquire()
+            CurrentUsers[self.chat_id].bclient.open_trade(
+                txlist,
+                self.name,
+                self.proportion,
+                self.leverage,
+                self.lmode,
+                self.tmodes,
+                self.positions,
+                self.take_profit_percent,
+                self.stop_loss_percent,
+                False,
+            )
+            UserLocks[self.chat_id].release()
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="Successfully closed all positions."
+        )
+        return
 
     def change_proportion(self, symbol, prop):
         self.reload()
@@ -1600,8 +1640,24 @@ def delTrader(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("This is not a valid trader.")
         return ConversationHandler.END
-    update.message.reply_text("Please wait. It takes around 1 min...")
-    user.delete_trader(idx)
+    context.user_data["deleteidx"] = idx
+    update.message.reply_text(
+        "Do you wish to close all positions with the trader automatically?",
+        reply_markup=ReplyKeyboardMarkup([["yes", "no"]], one_time_keyboard=True),
+    )
+    return CLOSEALL
+
+
+def delete_closePos(update, context):
+    idx = context.user_data["deleteidx"]
+    user = CurrentUsers[update.message.chat_id]
+    if update.message.text == "no":
+        update.message.reply_text("Please wait. It takes around 1 min...")
+        user.delete_trader(idx)
+    else:
+        update.message.reply_text("Closing all positions...")
+        user.threads[idx].manualclose()
+        user.delete_trader(idx)
     # update.message.reply_text(f"Successfully removed {update.message.text}.")
     return ConversationHandler.END
 
@@ -2893,7 +2949,8 @@ def reload_updater():
     conv_handler3 = ConversationHandler(
         entry_points=[CommandHandler("delete", delete_trader)],
         states={
-            TRADERNAME: [MessageHandler(Filters.text & ~Filters.command, delTrader)]
+            TRADERNAME: [MessageHandler(Filters.text & ~Filters.command, delTrader)],
+            CLOSEALL: [MessageHandler(Filters.regex("^(yes|no)$"), delete_closePos)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -5055,7 +5112,8 @@ def main() -> None:
     conv_handler3 = ConversationHandler(
         entry_points=[CommandHandler("delete", delete_trader)],
         states={
-            TRADERNAME: [MessageHandler(Filters.text & ~Filters.command, delTrader)]
+            TRADERNAME: [MessageHandler(Filters.text & ~Filters.command, delTrader)],
+            CLOSEALL: [MessageHandler(Filters.regex("^(yes|no)$"), delete_closePos)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
