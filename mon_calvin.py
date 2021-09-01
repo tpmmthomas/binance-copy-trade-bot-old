@@ -1252,9 +1252,10 @@ class userClient:
     def change_safety_ratio(self, safety_ratio):
         logger.info(f"{self.uname} changed safety ratio.")
         self.safety_ratio = safety_ratio
-        updater.bot.sendMessage(
-            chat_id=self.chat_id, text="Succesfully changed safety ratio."
-        )
+        self.client.change_safety_ratio(safety_ratio)
+        # updater.bot.sendMessage(
+        #     chat_id=self.chat_id, text="Succesfully changed safety ratio."
+        # )
         return
 
     def change_proportion(self, symbol, prop):
@@ -2980,6 +2981,7 @@ class BinanceClient:
     def change_safety_ratio(self, safety_ratio):
         logger.info(f"{self.uname} changed safety ratio.")
         self.safety_ratio = safety_ratio
+
         updater.bot.sendMessage(
             chat_id=self.chat_id, text="Successfully changed safety ratio."
         )
