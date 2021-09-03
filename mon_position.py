@@ -112,6 +112,7 @@ options.add_argument("--disable-gpu")
 options.add_argument("--disable-dev-shm-usage")
 UserLocks = {}
 avgwaittime = (0, 0)
+reloader = None
 
 
 def format_results(x, y):
@@ -1757,6 +1758,9 @@ def save_to_file(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+reloading = False
+
+
 def automatic_reload():
     while True:
         time.sleep(60 * 60 * 1.5)
@@ -1767,7 +1771,8 @@ def automatic_reload():
             for traders in CurrentUsers[users].threads:
                 traders.reload()
             time.sleep(60)
-        save_to_file(None, None)
+        if not reloading:
+            save_to_file(None, None)
 
 
 def set_all_leverage(update: Update, context: CallbackContext):
@@ -2899,6 +2904,9 @@ def error_callback(update, context):
     logger.error("Error!!!!!Why!!!")
     time.sleep(5)
     save_to_file(None, None)
+    global reloading
+    reloading = True
+    global CurrentUsers
     for user in CurrentUsers:
         user = CurrentUsers[user]
         for thread in user.threads:
@@ -2912,6 +2920,7 @@ def error_callback(update, context):
 
 def reload_updater():
     global updater
+    global reloading
     updater.stop()
     updater.is_idle = False
     time.sleep(2)
@@ -3203,6 +3212,7 @@ def reload_updater():
         restore_save_data()
     except:
         logger.info("No data to restore.")
+    reloading = False
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
@@ -5377,7 +5387,6 @@ def main() -> None:
         logger.info("No data to restore.")
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
-
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
