@@ -2904,7 +2904,7 @@ def error_callback(update, context):
         for thread in user.threads:
             thread.stop()
         updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
-        del CurrentUsers[user]
+    CurrentUsers = {}
     logger.info("Everyone's service has ended.")
     t1 = threading.Thread(target=reload_updater)
     t1.start()
