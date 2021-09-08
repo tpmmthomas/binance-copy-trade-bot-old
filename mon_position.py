@@ -397,6 +397,7 @@ class FetchLatestPosition(threading.Thread):
         txsymbol = []
         txsize = []
         executePrice = []
+        isClosedAll = []
         if (isinstance(df, str) or df is None) and (
             isinstance(df2, str) or df2 is None
         ):
@@ -412,17 +413,20 @@ class FetchLatestPosition(threading.Thread):
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isClosedAll.append(False)
                 else:
                     txtype.append("OpenShort")
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isClosedAll.append(False)
             txs = pd.DataFrame(
                 {
                     "txtype": txtype,
                     "symbol": txsymbol,
                     "size": txsize,
                     "ExecPrice": executePrice,
+                    "isClosedAll": isClosedAll,
                 }
             )
         elif isinstance(df2, str):
@@ -436,17 +440,20 @@ class FetchLatestPosition(threading.Thread):
                     txsymbol.append(row["symbol"])
                     txsize.append(-size)
                     executePrice.append(row["Mark Price"])
+                    isClosedAll.append(True)
                 else:
                     txtype.append("CloseShort")
                     txsymbol.append(row["symbol"])
                     txsize.append(-size)
                     executePrice.append(row["Mark Price"])
+                    isClosedAll.append(True)
             txs = pd.DataFrame(
                 {
                     "txtype": txtype,
                     "symbol": txsymbol,
                     "size": txsize,
                     "ExecPrice": executePrice,
+                    "isClosedAll": isClosedAll,
                 }
             )
         else:
@@ -492,6 +499,7 @@ class FetchLatestPosition(threading.Thread):
                             txtype.append("OpenLong")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
+                            isClosedAll.append(False)
                             try:
                                 exp = (
                                     newentry * newsize - oldentry * size
@@ -504,6 +512,7 @@ class FetchLatestPosition(threading.Thread):
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
+                            isClosedAll.append(False)
                         df2 = df2.drop(r)
                         hasChanged = True
                         break
@@ -514,10 +523,12 @@ class FetchLatestPosition(threading.Thread):
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
+                            isClosedAll.append(False)
                         else:
                             txtype.append("OpenShort")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
+                            isClosedAll.append(False)
                             try:
                                 exp = (
                                     newentry * newsize - oldentry * size
@@ -534,11 +545,13 @@ class FetchLatestPosition(threading.Thread):
                         txsymbol.append(row["symbol"])
                         txsize.append(-size)
                         executePrice.append(oldmark)
+                        isClosedAll.append(True)
                     else:
                         txtype.append("CloseShort")
                         txsymbol.append(row["symbol"])
                         txsize.append(-size)
                         executePrice.append(oldmark)
+                        isClosedAll.append(True)
             for index, row in df2.iterrows():
                 size = row["size"]
                 if isinstance(size, str):
@@ -549,17 +562,20 @@ class FetchLatestPosition(threading.Thread):
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isClosedAll.append(False)
                 else:
                     txtype.append("OpenShort")
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isClosedAll.append(False)
             txs = pd.DataFrame(
                 {
                     "txType": txtype,
                     "symbol": txsymbol,
                     "size": txsize,
                     "ExecPrice": executePrice,
+                    "isClosedAll": isClosedAll,
                 }
             )
         if not txs.empty:
@@ -2853,6 +2869,13 @@ def check_balance(update: Update, context: CallbackContext):
     return
 
 
+def check_position(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+    CurrentUsers[update.message.chat_id].bclient.get_positions()
+    return
+
+
 def close_position(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
@@ -3205,6 +3228,7 @@ def reload_updater():
     dispatcher.add_handler(conv_handler23)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
     dispatcher.add_error_handler(error_callback)
     updater = updater2
@@ -3214,6 +3238,7 @@ def reload_updater():
         logger.info("No data to restore.")
     reloading = False
     updater.start_polling()
+
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
     # start_polling() is non-blocking and will stop the bot gracefully.
@@ -3245,6 +3270,12 @@ class AAXClient:
         for symbol in self.stepsize:
             symbolList.append(symbol)
         return symbolList
+
+    def get_positions(self):
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="This feature has not been implemented yet!"
+        )
+        return
 
     def close_position(self, symbol):
         data = {"symbol": symbol}
@@ -3744,6 +3775,12 @@ class BybitClient:
         for trader in CurrentUsers[self.chat_id].threads:
             trader.positions[symbol + "LONG"] = 0
             trader.positions[symbol + "SHORT"] = 0
+        return
+
+    def get_positions(self):
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="This feature has not been implemented yet!"
+        )
         return
 
     def tpsl_trade(
@@ -4319,6 +4356,61 @@ class BinanceClient:
             symbolList.append(symbol)
         return symbolList
 
+    def get_positions(self):
+        try:
+            result = self.client.futures_position_information()
+        except BinanceAPIException as e:
+            logger.error("Cannot retrieve latest position.")
+            logger.error(str(e))
+            return
+        except:
+            logger.error("Other errors")
+            return
+        symbol = []
+        size = []
+        EnPrice = []
+        MarkPrice = []
+        PNL = []
+        margin = []
+        listTradingSymbols = []
+        for pos in result:
+            if float(pos["positionAmt"]) != 0:
+                symbol.append(pos["symbol"])
+                tsize = pos["positionAmt"]
+                size.append(tsize)
+                EnPrice.append(pos["entryPrice"])
+                MarkPrice.append(pos["markPrice"])
+                PNL.append(pos["unRealizedProfit"])
+                margin.append(pos["leverage"])
+                listTradingSymbols.append(pos["symbol"])
+        newPosition = pd.DataFrame(
+            {
+                "symbol": symbol,
+                "size": size,
+                "Entry Price": EnPrice,
+                "Mark Price": MarkPrice,
+                "PNL": PNL,
+                "leverage": margin,
+            }
+        )
+        numrows = newPosition.shape[0]
+        if numrows <= 10:
+            tosend = f"Your current Position: " + "\n" + newPosition.to_string() + "\n"
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+        else:
+            firstdf = newPosition.iloc[0:10]
+            tosend = (
+                f"Your current Position: " + "\n" + firstdf.to_string() + "\n(cont...)"
+            )
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+            for i in range(numrows // 10):
+                seconddf = newPosition.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
+                if not seconddf.empty:
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id, text=seconddf.to_string()
+                    )
+        return
+
     def tpsl_trade(
         self, symbol, side, positionSide, qty, excprice, leverage, tp, sl
     ):  # make sure everything in numbers not text//side: original side
@@ -4710,7 +4802,7 @@ class BinanceClient:
                             chat_id=self.chat_id,
                             text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                         )
-            elif not isOpen and quant / positions[checkKey] > 0.9:
+            elif not isOpen and (quant / positions[checkKey] > 0.9 or tradeinfo[4]):
                 quant = max(positions[checkKey], quant)
             if quant == 0:
                 if not mute:
@@ -5369,6 +5461,7 @@ def main() -> None:
     dispatcher.add_handler(conv_handler23)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
     dispatcher.add_error_handler(error_callback)
     web_scraper.start()
