@@ -9,7 +9,9 @@ __pycache__/
 *.pickle
 # C extensions
 *.so
-
+*.packaging
+*.csv
+*.png
 # Distribution / packaging
 .Python
 build/

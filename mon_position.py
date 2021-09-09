@@ -2946,7 +2946,11 @@ def viewpnlstat(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
     user = CurrentUsers[update.message.chat_id]
-    df = pd.read_csv(f"{user.uname}_pnlrecord.csv", header=None)
+    try:
+        df = pd.read_csv(f"{user.uname}_pnlrecord.csv", header=None)
+    except:
+        update.message.reply_text("No statistics yet.")
+        return
     pastvalue = df.loc[:, 1].values
     pasttime = df.loc[:, 0].values
     if len(pastvalue) == 0:
