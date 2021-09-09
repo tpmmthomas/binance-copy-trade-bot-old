@@ -181,6 +181,20 @@ def format_username(x, y):
     return words[-1]
 
 
+def save_trading_pnl():
+    while True:
+        time.sleep(5 * 60)
+        for user in CurrentUsers:
+            user = CurrentUsers[user]
+            try:
+                bal = user.bclient.get_balance(False)
+                with open(f"{user.uname}_pnlrecord.csv", "a") as f:
+                    f.write(f"{str(datetime.now())}\t{str(bal)}\n")
+            except:
+                continue
+            break  # just my pnl currently
+
+
 class Auth(requests.auth.AuthBase):
     def __init__(self, api_key, secret_key):
         self.api_key = api_key
@@ -4974,13 +4988,16 @@ class BinanceClient:
         )
         return
 
-    def get_balance(self):
+    def get_balance(self, out=True):
         try:
             result = self.client.futures_account()["assets"]
             for asset in result:
                 if asset["asset"] == "USDT":
-                    tosend = f"Your USDT account balance:\nBalance: {asset['walletBalance']}\nUnrealized PNL: {asset['unrealizedProfit']}\nMargin balance: {asset['marginBalance']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
-                    updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                    if out:
+                        tosend = f"Your USDT account balance:\nBalance: {asset['walletBalance']}\nUnrealized PNL: {asset['unrealizedProfit']}\nMargin balance: {asset['marginBalance']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
+                        updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                    else:
+                        return asset["walletBalance"]
         except BinanceAPIException as e:
             updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
 
@@ -5480,6 +5497,8 @@ def main() -> None:
         logger.info("No data to restore.")
     t1 = threading.Thread(target=automatic_reload)
     t1.start()
+    t2 = threading.Thread(target=save_trading_pnl)
+    t2.start()
     updater.start_polling()
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
