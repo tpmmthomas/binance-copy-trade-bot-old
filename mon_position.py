@@ -5048,7 +5048,8 @@ class BinanceClient:
                     else:
                         return asset["marginBalance"]
         except BinanceAPIException as e:
-            updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
+            if out:
+                updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
 
     def close_position(self, symbol):
         updater.bot.sendMessage(
