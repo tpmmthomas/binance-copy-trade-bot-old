@@ -184,7 +184,7 @@ def format_username(x, y):
 
 def save_trading_pnl():
     while True:
-        time.sleep(5 * 60)
+        time.sleep(2 * 60)
         for user in CurrentUsers:
             user = CurrentUsers[user]
             try:
@@ -2957,7 +2957,7 @@ def viewpnlstat(update: Update, context: CallbackContext):
         update.message.reply_text("No statistics yet.")
         return
     piclock.acquire()
-    daily = 24 * 12
+    daily = 24 * 30
     plt.plot(pasttime[-daily:], pastvalue[-daily:])
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
@@ -2965,7 +2965,7 @@ def viewpnlstat(update: Update, context: CallbackContext):
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
-    weekly = 7 * 24 * 12
+    weekly = 7 * 24 * 30
     plt.plot(pasttime[-weekly:], pastvalue[-weekly:])
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
@@ -2973,7 +2973,7 @@ def viewpnlstat(update: Update, context: CallbackContext):
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
-    monthly = 30 * 7 * 24 * 12
+    monthly = 30 * 7 * 24 * 30
     plt.plot(pasttime[-monthly:], pastvalue[-monthly:])
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
