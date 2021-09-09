@@ -13,6 +13,7 @@ from telegram.ext import (
 )
 import time
 import pandas as pd
+import matplotlib.pyplot as plt
 import config.config as cfg
 from selenium import webdriver
 from bs4 import BeautifulSoup
@@ -189,10 +190,11 @@ def save_trading_pnl():
             try:
                 bal = user.bclient.get_balance(False)
                 with open(f"{user.uname}_pnlrecord.csv", "a") as f:
-                    f.write(f"{str(datetime.now())}\t{str(bal)}\n")
+                    f.write(
+                        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{str(bal)}\n"
+                    )
             except:
                 continue
-            break  # just my pnl currently
 
 
 class Auth(requests.auth.AuthBase):
@@ -2937,6 +2939,48 @@ def check_waittime(update: Update, context: CallbackContext):
     return
 
 
+piclock = threading.Lock()
+
+
+def viewpnlstat(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+    user = CurrentUsers[update.message.chat_id]
+    df = pd.read_csv(f"{user.uname}_pnlrecord.csv", header=None)
+    pastvalue = df.loc[:, 1].values
+    pasttime = df.loc[:, 0].values
+    if len(pastvalue) == 0:
+        update.message.reply_text("No statistics yet.")
+        return
+    piclock.acquire()
+    daily = 24 * 12
+    plt.plot(pasttime[-daily:], pastvalue[-daily:])
+    plt.ylabel("USDT Balance")
+    plt.xlabel("Time")
+    plt.title("Daily Balance")
+    plt.savefig("0.png")
+    with open("0.png", "rb") as f:
+        updater.bot.sendPhoto(user.chat_id, f)
+    weekly = 7 * 24 * 12
+    plt.plot(pasttime[-weekly:], pastvalue[-weekly:])
+    plt.ylabel("USDT Balance")
+    plt.xlabel("Time")
+    plt.title("Weekly Balance")
+    plt.savefig("0.png")
+    with open("0.png", "rb") as f:
+        updater.bot.sendPhoto(user.chat_id, f)
+    monthly = 30 * 7 * 24 * 12
+    plt.plot(pasttime[-monthly:], pastvalue[-monthly:])
+    plt.ylabel("USDT Balance")
+    plt.xlabel("Time")
+    plt.title("Monthly Balance")
+    plt.savefig("0.png")
+    with open("0.png", "rb") as f:
+        updater.bot.sendPhoto(user.chat_id, f)
+    piclock.release()
+    return
+
+
 def error_callback(update, context):
     logger.error("Error!!!!!Why!!!")
     time.sleep(5)
@@ -3244,6 +3288,7 @@ def reload_updater():
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
+    dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
     dispatcher.add_error_handler(error_callback)
     updater = updater2
     try:
@@ -4997,7 +5042,7 @@ class BinanceClient:
                         tosend = f"Your USDT account balance:\nBalance: {asset['walletBalance']}\nUnrealized PNL: {asset['unrealizedProfit']}\nMargin balance: {asset['marginBalance']}\nMax withdrawal balance: {asset['maxWithdrawAmount']}"
                         updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
                     else:
-                        return asset["walletBalance"]
+                        return asset["marginBalance"]
         except BinanceAPIException as e:
             updater.bot.sendMessage(chat_id=self.chat_id, text=str(e))
 
@@ -5480,6 +5525,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
+    dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
     dispatcher.add_error_handler(error_callback)
     web_scraper.start()
     # TODO: add /end command
