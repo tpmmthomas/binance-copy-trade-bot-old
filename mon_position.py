@@ -191,9 +191,7 @@ def save_trading_pnl():
                 bal = user.bclient.get_balance(False)
                 if not bal is None:
                     with open(f"{user.uname}_pnlrecord.csv", "a") as f:
-                        f.write(
-                            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{str(bal)}\n"
-                        )
+                        f.write(f"{str(bal)}\n")
             except:
                 continue
 
@@ -2952,48 +2950,32 @@ def viewpnlstat(update: Update, context: CallbackContext):
     except:
         update.message.reply_text("No statistics yet.")
         return
-    pastvalue = df.loc[:, 1].values
-    pasttime = df.loc[:, 0].values
+    pastvalue = df.loc[:, 0].values
     if len(pastvalue) == 0:
         update.message.reply_text("No statistics yet.")
         return
     piclock.acquire()
     daily = 24 * 30
-    plt.plot(pasttime[-daily:], pastvalue[-daily:])
+    plt.plot(pastvalue[-daily:])
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
     plt.title("Daily Balance")
-    plt.xticks(
-        [pasttime[-daily:][0], pastvalue[-daily:][-1]],
-        visible=True,
-        rotation="horizontal",
-    )
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     weekly = 7 * 24 * 30
-    plt.plot(pasttime[-weekly:], pastvalue[-weekly:])
+    plt.plot(pastvalue[-weekly:])
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
     plt.title("Weekly Balance")
-    plt.xticks(
-        [pasttime[-weekly:][0], pastvalue[-weekly:][-1]],
-        visible=True,
-        rotation="horizontal",
-    )
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     monthly = 30 * 7 * 24 * 30
-    plt.plot(pasttime[-monthly:], pastvalue[-monthly:])
+    plt.plot(pastvalue[-monthly:])
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
     plt.title("Monthly Balance")
-    plt.xticks(
-        [pasttime[-monthly:][0], pastvalue[-monthly:][-1]],
-        visible=True,
-        rotation="horizontal",
-    )
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
