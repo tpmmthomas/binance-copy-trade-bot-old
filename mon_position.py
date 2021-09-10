@@ -2963,6 +2963,9 @@ def viewpnlstat(update: Update, context: CallbackContext):
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
     plt.title("Daily Balance")
+    ax = plt.gca()
+    my_xticks = ax.get_xticks()
+    plt.xticks([my_xticks[0], my_xticks[-1]], visible=True, rotation="horizontal")
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
@@ -2971,6 +2974,9 @@ def viewpnlstat(update: Update, context: CallbackContext):
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
     plt.title("Weekly Balance")
+    ax = plt.gca()
+    my_xticks = ax.get_xticks()
+    plt.xticks([my_xticks[0], my_xticks[-1]], visible=True, rotation="horizontal")
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
@@ -2979,6 +2985,9 @@ def viewpnlstat(update: Update, context: CallbackContext):
     plt.ylabel("USDT Balance")
     plt.xlabel("Time")
     plt.title("Monthly Balance")
+    ax = plt.gca()
+    my_xticks = ax.get_xticks()
+    plt.xticks([my_xticks[0], my_xticks[-1]], visible=True, rotation="horizontal")
     plt.savefig("0.png")
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
