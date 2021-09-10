@@ -189,10 +189,11 @@ def save_trading_pnl():
             user = CurrentUsers[user]
             try:
                 bal = user.bclient.get_balance(False)
-                with open(f"{user.uname}_pnlrecord.csv", "a") as f:
-                    f.write(
-                        f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{str(bal)}\n"
-                    )
+                if not bal is None:
+                    with open(f"{user.uname}_pnlrecord.csv", "a") as f:
+                        f.write(
+                            f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{str(bal)}\n"
+                        )
             except:
                 continue
 
