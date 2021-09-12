@@ -6,7 +6,7 @@ from binance.exceptions import BinanceAPIException, BinanceOrderException
 from time import sleep
 import binance
 import pandas as pd
-import datetime
+from datetime import datetime, timedelta
 import threading
 import time
 import logging
@@ -25,7 +25,10 @@ from telegram.ext import (
 )
 import json
 import bybit
+import random
+import matplotlib.pyplot as plt
 import hmac, hashlib, time, requests
+from multiprocessing import Process
 
 q = queue.Queue(200)
 logging.basicConfig(
@@ -123,7 +126,7 @@ class getStreamData(threading.Thread):
         result = self.client.futures_account()["assets"]
         for asset in result:
             if asset["asset"] == "USDT":
-                return asset["marginBalance"]
+                return float(asset["marginBalance"])
 
     def run(self):
         while True:
@@ -1065,6 +1068,68 @@ def change_secret(update: Update, context: CallbackContext):
     )
     context.user_data["api_key"] = update.message.text
     return SEP2
+
+
+piclock = threading.Lock()
+
+
+def save_trading_pnl():
+    while True:
+        time.sleep(2 * 60)
+        try:
+            bal = current_stream.get_balance()
+            if not bal is None:
+                with open(f"calvinbot_pnlrecord.csv", "a") as f:
+                    f.write(f"{str(bal)}\n")
+        except:
+            continue
+
+
+def plotgraph(val, title):
+    color = ["b", "g", "r", "c", "m", "k"]
+    randomColor = color[random.randint(0, len(color) - 1)]
+    plt.plot(val, color=randomColor)
+    plt.ylabel("USDT Balance")
+    current = datetime.now() + timedelta(hours=8)
+    plt.xlabel(f"Time (updated {current.strftime('%d/%m/%Y, %H:%M:%S')})")
+    plt.title(title)
+    plt.savefig("1.png")
+
+
+def viewpnlstat(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+    user = current_users[update.message.chat_id]
+    try:
+        df = pd.read_csv(f"calvinbot_pnlrecord.csv", header=None)
+    except:
+        update.message.reply_text("No statistics yet.")
+        return
+    pastvalue = df.loc[:, 0].values
+    if len(pastvalue) == 0:
+        update.message.reply_text("No statistics yet.")
+        return
+    piclock.acquire()
+    daily = 24 * 30
+    p1 = Process(target=plotgraph, args=(pastvalue[-daily:], "Daily Balance",))
+    p1.start()
+    p1.join()
+    with open("1.png", "rb") as f:
+        updater.bot.sendPhoto(user.chat_id, f)
+    weekly = 7 * 24 * 30
+    p2 = Process(target=plotgraph, args=(pastvalue[-weekly:], "Weekly Balance",))
+    p2.start()
+    p2.join()
+    with open("1.png", "rb") as f:
+        updater.bot.sendPhoto(user.chat_id, f)
+    monthly = 30 * 7 * 24 * 30
+    p3 = Process(target=plotgraph, args=(pastvalue[-monthly:], "Monthly Balance",))
+    p3.start()
+    p3.join()
+    with open("1.png", "rb") as f:
+        updater.bot.sendPhoto(user.chat_id, f)
+    piclock.release()
+    return
 
 
 def change_bnall(update: Update, context: CallbackContext):
@@ -3226,6 +3291,7 @@ def main():
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
     current_stream = getStreamData()
     current_stream.start()
     try:
@@ -3234,7 +3300,8 @@ def main():
         logger.info("No data to restore.")
     thr = threading.Thread(target=automatic_reload)
     thr.start()
-
+    t2 = threading.Thread(target=save_trading_pnl)
+    t2.start()
     updater.start_polling()
     updater.idle()
 
