@@ -1090,6 +1090,8 @@ def plotgraph(val, title):
     randomColor = color[random.randint(0, len(color) - 1)]
     plt.plot(val, color=randomColor)
     plt.ylabel("USDT Balance")
+    plt.ylim(0, math.ceil(max(val)))
+    plt.autoscale(False)
     current = datetime.now() + timedelta(hours=8)
     plt.xlabel(f"Time (updated {current.strftime('%d/%m/%Y, %H:%M:%S')})")
     plt.title(title)
