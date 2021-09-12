@@ -1085,6 +1085,7 @@ def save_trading_pnl():
             continue
 
 
+#
 def plotgraph(val, title):
     color = ["b", "g", "r", "c", "m", "k"]
     randomColor = color[random.randint(0, len(color) - 1)]
