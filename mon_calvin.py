@@ -585,7 +585,7 @@ def save_to_file(update: Update, context: CallbackContext):
 
 def view_position(update: Update, context: CallbackContext):
     position = current_stream.lastPositions
-    bal = current_stream.get_balance()
+    bal = float(current_stream.get_balance())
     if position is None:
         updater.bot.sendMessage(chat_id=update.message.chat_id, text="Error.")
     elif position.empty:
