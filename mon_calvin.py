@@ -595,9 +595,10 @@ def view_position(update: Update, context: CallbackContext):
             chat_id=update.message.chat_id, text=position.to_string()
         )
     if not bal is None:
+        roi = "{:.2f}".format((bal - 38500) / 38500 * 100)
         updater.bot.sendMessage(
             chat_id=update.message.chat_id,
-            text=f"Account current USDT balance: {bal}\nROI%: {'%.2f'.format((bal-38500)/38500*100)}%",
+            text=f"Account current USDT balance: {bal}\nROI%: {roi}%",
         )
     return
 
