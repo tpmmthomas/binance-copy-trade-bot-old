@@ -119,6 +119,12 @@ class getStreamData(threading.Thread):
         self.client = Client(cnt.api_key, cnt.api_secret)
         self.lastPositions = None
 
+    def get_balance(self):
+        result = self.client.futures_account()["assets"]
+        for asset in result:
+            if asset["asset"] == "USDT":
+                return asset["marginBalance"]
+
     def run(self):
         while True:
             time.sleep(4)
@@ -579,6 +585,7 @@ def save_to_file(update: Update, context: CallbackContext):
 
 def view_position(update: Update, context: CallbackContext):
     position = current_stream.lastPositions
+    bal = current_stream.get_balance()
     if position is None:
         updater.bot.sendMessage(chat_id=update.message.chat_id, text="Error.")
     elif position.empty:
@@ -586,6 +593,11 @@ def view_position(update: Update, context: CallbackContext):
     else:
         updater.bot.sendMessage(
             chat_id=update.message.chat_id, text=position.to_string()
+        )
+    if not bal is None:
+        updater.bot.sendMessage(
+            chat_id=update.message.chat_id,
+            text=f"Account current USDT balance: {bal}\nROI%: {'%.2f'.format((bal-38500)/38500*100)}%",
         )
     return
 
@@ -2066,10 +2078,7 @@ class BybitClient:
                         checkside = "Buy" if result["side"] == "Sell" else "Sell"
                         for pos in res:
                             logger.info(str(pos))
-                            if (
-                                pos["side"] == checkside
-                                and float(pos["size"]) == 0
-                            ):
+                            if pos["side"] == checkside and float(pos["size"]) == 0:
                                 current_users[self.chat_id].positions[positionKey] = 0
                                 break
                     logger.info(
