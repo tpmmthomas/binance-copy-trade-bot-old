@@ -1088,10 +1088,10 @@ def save_trading_pnl():
 def plotgraph(val, title):
     color = ["b", "g", "r", "c", "m", "k"]
     randomColor = color[random.randint(0, len(color) - 1)]
-    plt.plot(val, color=randomColor)
     plt.ylabel("USDT Balance")
-    plt.ylim(0, math.ceil(max(val)))
+    plt.ylim(math.floor(min(val) * 0.8), math.ceil(max(val)))
     plt.autoscale(False)
+    plt.plot(val, color=randomColor)
     current = datetime.now() + timedelta(hours=8)
     plt.xlabel(f"Time (updated {current.strftime('%d/%m/%Y, %H:%M:%S')})")
     plt.title(title)
