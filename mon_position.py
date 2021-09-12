@@ -30,6 +30,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import urllib3
+from multiprocessing import Process
 import urllib
 
 urllib3.disable_warnings()
@@ -2941,6 +2942,17 @@ def check_waittime(update: Update, context: CallbackContext):
 piclock = threading.Lock()
 
 
+def plotgraph(val, title):
+    color = ["b", "g", "r", "c", "m", "k"]
+    randomColor = color[random.randint(0, len(color) - 1)]
+    plt.plot(val, color=randomColor)
+    plt.ylabel("USDT Balance")
+    current = datetime.now() + timedelta(hours=8)
+    plt.xlabel(f"Time (updated {current.strftime('%d/%m/%Y, %H:%M:%S')})")
+    plt.title(title)
+    plt.savefig("0.png")
+
+
 def viewpnlstat(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
@@ -2956,27 +2968,21 @@ def viewpnlstat(update: Update, context: CallbackContext):
         return
     piclock.acquire()
     daily = 24 * 30
-    plt.plot(pastvalue[-daily:])
-    plt.ylabel("USDT Balance")
-    plt.xlabel("Time")
-    plt.title("Daily Balance")
-    plt.savefig("0.png")
+    p1 = Process(target=plotgraph, args=(pastvalue[-daily:], "Daily Balance",))
+    p1.start()
+    p1.join()
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     weekly = 7 * 24 * 30
-    plt.plot(pastvalue[-weekly:])
-    plt.ylabel("USDT Balance")
-    plt.xlabel("Time")
-    plt.title("Weekly Balance")
-    plt.savefig("0.png")
+    p2 = Process(target=plotgraph, args=(pastvalue[-weekly:], "Weekly Balance",))
+    p2.start()
+    p2.join()
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     monthly = 30 * 7 * 24 * 30
-    plt.plot(pastvalue[-monthly:])
-    plt.ylabel("USDT Balance")
-    plt.xlabel("Time")
-    plt.title("Monthly Balance")
-    plt.savefig("0.png")
+    p3 = Process(target=plotgraph, args=(pastvalue[-monthly:], "Monthly Balance",))
+    p3.start()
+    p3.join()
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     piclock.release()
