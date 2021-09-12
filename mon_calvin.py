@@ -1090,7 +1090,7 @@ def plotgraph(val, title):
     color = ["b", "g", "r", "c", "m", "k"]
     randomColor = color[random.randint(0, len(color) - 1)]
     plt.ylabel("USDT Balance")
-    plt.ylim(math.floor(min(val) * 0.8), math.ceil(max(val)))
+    plt.ylim(math.floor(min(val) * 0.99), math.ceil(max(val)))
     plt.autoscale(False)
     plt.plot(val, color=randomColor)
     current = datetime.now() + timedelta(hours=8)
