@@ -184,7 +184,7 @@ class getStreamData(threading.Thread):
         toComp = df[["symbol", "size"]]
         toComp2 = df2[["symbol", "size"]]
         if toComp.equals(toComp2):
-            return False, None,None #
+            return False, None, None  #
         txtype = []
         txsymbol = []
         txsize = []
@@ -2325,7 +2325,7 @@ class BybitClient:
                             chat_id=self.chat_id,
                             text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                         )
-            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9)::
+            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9):
                 quant = max(positions[checkKey], quant)
             if quant == 0:
                 if not mute:
@@ -2840,7 +2840,7 @@ class BinanceClient:
         takeProfit,
         stopLoss,
         mute,
-        isCloseAll
+        isCloseAll,
     ):
         try:
             self.reload()
@@ -2917,7 +2917,7 @@ class BinanceClient:
                             chat_id=self.chat_id,
                             text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                         )
-            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9)::
+            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9):
                 quant = max(positions[checkKey], quant)
             if quant == 0:
                 if not mute:
