@@ -184,7 +184,7 @@ class getStreamData(threading.Thread):
         toComp = df[["symbol", "size"]]
         toComp2 = df2[["symbol", "size"]]
         if toComp.equals(toComp2):
-            return False, None
+            return False, None,None
         txtype = []
         txsymbol = []
         txsize = []
