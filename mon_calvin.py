@@ -172,15 +172,15 @@ class getStreamData(threading.Thread):
                     "leverage": margin,
                 }
             )
-            isDiff, diff = self.compare(self.lastPositions, newPosition)
+            isDiff, diff, isCloseAll = self.compare(self.lastPositions, newPosition)
             if isDiff and not diff.empty:
                 # logger.info("Yes")
-                process_newest_position(diff, newPosition)
+                process_newest_position(diff, newPosition, isCloseAll)
             self.lastPositions = newPosition
 
     def compare(self, df, df2):
         if df is None or df2 is None:
-            return False, None
+            return False, None, None
         toComp = df[["symbol", "size"]]
         toComp2 = df2[["symbol", "size"]]
         if toComp.equals(toComp2):
@@ -189,6 +189,7 @@ class getStreamData(threading.Thread):
         txsymbol = []
         txsize = []
         executePrice = []
+        isCloseAll = []
         if df.empty:
             for index, row in df2.iterrows():
                 size = row["size"]
@@ -200,11 +201,13 @@ class getStreamData(threading.Thread):
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isCloseAll.append(False)
                 else:
                     txtype.append("OpenShort")
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isCloseAll.append(False)
             txs = pd.DataFrame(
                 {
                     "txtype": txtype,
@@ -224,11 +227,13 @@ class getStreamData(threading.Thread):
                     txsymbol.append(row["symbol"])
                     txsize.append(-size)
                     executePrice.append(row["Mark Price"])
+                    isCloseAll.append(True)
                 else:
                     txtype.append("CloseShort")
                     txsymbol.append(row["symbol"])
                     txsize.append(-size)
                     executePrice.append(row["Mark Price"])
+                    isCloseAll.append(True)
             txs = pd.DataFrame(
                 {
                     "txtype": txtype,
@@ -280,6 +285,7 @@ class getStreamData(threading.Thread):
                             txtype.append("OpenLong")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
+                            isCloseAll.append(False)
                             try:
                                 exp = (
                                     newentry * newsize - oldentry * size
@@ -292,6 +298,7 @@ class getStreamData(threading.Thread):
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
+                            isCloseAll.append(False)
                         df2 = df2.drop(r)
                         hasChanged = True
                         break
@@ -302,10 +309,12 @@ class getStreamData(threading.Thread):
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
                             executePrice.append(newmark)
+                            isCloseAll.append(False)
                         else:
                             txtype.append("OpenShort")
                             txsymbol.append(df2row[0])
                             txsize.append(changesize)
+                            isCloseAll.append(False)
                             try:
                                 exp = (
                                     newentry * newsize - oldentry * size
@@ -322,11 +331,13 @@ class getStreamData(threading.Thread):
                         txsymbol.append(row["symbol"])
                         txsize.append(-size)
                         executePrice.append(oldmark)
+                        isCloseAll.append(True)
                     else:
                         txtype.append("CloseShort")
                         txsymbol.append(row["symbol"])
                         txsize.append(-size)
                         executePrice.append(oldmark)
+                        isCloseAll.append(True)
             for index, row in df2.iterrows():
                 size = row["size"]
                 if isinstance(size, str):
@@ -337,11 +348,13 @@ class getStreamData(threading.Thread):
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isCloseAll.append(False)
                 else:
                     txtype.append("OpenShort")
                     txsymbol.append(row["symbol"])
                     txsize.append(size)
                     executePrice.append(row["Entry Price"])
+                    isCloseAll.append(False)
             txs = pd.DataFrame(
                 {
                     "txType": txtype,
@@ -350,13 +363,13 @@ class getStreamData(threading.Thread):
                     "ExecPrice": executePrice,
                 }
             )
-        return True, txs
+        return True, txs, isCloseAll
 
     def stop(self):
         self.isStop.set()
 
 
-def process_newest_position(diff, df):
+def process_newest_position(diff, df, isCloseAll):
     for chat_id in current_users:
         if df.empty:
             updater.bot.sendMessage(
@@ -370,7 +383,7 @@ def process_newest_position(diff, df):
             f"*The positions changed in Kevin's account:*\n" + diff.to_string() + "\n"
         )
         updater.bot.sendMessage(chat_id=chat_id, text=tosend)
-        current_users[chat_id].open_trade(diff)
+        current_users[chat_id].open_trade(diff, isCloseAll)
 
 
 def automatic_reload():
@@ -1277,7 +1290,7 @@ class userClient:
     def get_symbols(self):
         return self.client.get_symbols()
 
-    def open_trade(self, df):
+    def open_trade(self, df, isCloseAll):
         return self.client.open_trade(
             df,
             self.uname,
@@ -1289,6 +1302,7 @@ class userClient:
             self.take_profit_percent,
             self.stop_loss_percent,
             False,
+            isCloseAll,
         )
 
     def reload(self):
@@ -1682,6 +1696,7 @@ class AAXClient:
         takeProfit,
         stopLoss,
         mute,
+        isCloseAll,
     ):
         try:
             self.reload()
@@ -1689,7 +1704,9 @@ class AAXClient:
             time.sleep(10)
         logger.info("DEBUG\n" + df.to_string())
         df = df.values
+        i = -1
         for tradeinfo in df:
+            i += 1
             tradeinfo[1] = tradeinfo[1] + "FP"
             isOpen = False
             types = tradeinfo[0].upper()
@@ -1763,7 +1780,7 @@ class AAXClient:
                             chat_id=self.chat_id,
                             text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                         )
-            elif not isOpen and quant / positions[checkKey] > 0.9:
+            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9):
                 quant = max(positions[checkKey], quant)
             if quant == 0:
                 if not mute:
@@ -2235,6 +2252,7 @@ class BybitClient:
         takeProfit,
         stopLoss,
         mute,
+        isCloseAll,
     ):
 
         try:
@@ -2243,7 +2261,9 @@ class BybitClient:
             time.sleep(10)
         logger.info("DEBUG\n" + df.to_string())
         df = df.values
+        i = -1
         for tradeinfo in df:
+            i += 1
             isOpen = False
             types = tradeinfo[0].upper()
             balance, collateral, coin = 0, 0, ""
@@ -2305,7 +2325,7 @@ class BybitClient:
                             chat_id=self.chat_id,
                             text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                         )
-            elif not isOpen and quant / positions[checkKey] > 0.9:
+            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9)::
                 quant = max(positions[checkKey], quant)
             if quant == 0:
                 if not mute:
@@ -2820,6 +2840,7 @@ class BinanceClient:
         takeProfit,
         stopLoss,
         mute,
+        isCloseAll
     ):
         try:
             self.reload()
@@ -2827,7 +2848,9 @@ class BinanceClient:
             time.sleep(10)
         logger.info("DEBUG\n" + df.to_string())
         df = df.values
+        i = -1
         for tradeinfo in df:
+            i += 1
             isOpen = False
             types = tradeinfo[0].upper()
             balance, collateral, coin = 0, 0, ""
@@ -2894,7 +2917,7 @@ class BinanceClient:
                             chat_id=self.chat_id,
                             text=f"Close {checkKey}: The trade quantity will be less than expected, because you don't have enough positions to close.",
                         )
-            elif not isOpen and quant / positions[checkKey] > 0.9:
+            elif not isOpen and (isCloseAll[i] or quant / positions[checkKey] > 0.9)::
                 quant = max(positions[checkKey], quant)
             if quant == 0:
                 if not mute:
