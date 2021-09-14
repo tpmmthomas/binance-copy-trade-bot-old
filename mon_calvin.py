@@ -89,7 +89,8 @@ logging.basicConfig(
     SAFERATIO,
     SEP3,
     CP1,
-) = range(54)
+    UPDATEPROP,
+) = range(55)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
@@ -481,7 +482,7 @@ def check_ratio(update: Update, context: CallbackContext):
     try:
         ratio = float(update.message.text)
         assert ratio >= 100
-        ratio = ratio / 38500
+        ratio = ratio / current_stream.get_balance()
         ratio = round(ratio, 5)
     except:
         update.message.reply_text(
@@ -721,6 +722,29 @@ def setAllProportionReal(update: Update, context: CallbackContext):
         update.message.reply_text("This is not a valid proportion, please enter again.")
         return ALLPROP
     user.change_all_proportion(prop)
+    return ConversationHandler.END
+
+def update_proportion(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    user = current_users[update.message.chat_id]
+    logger.info(f"User {user.uname} adjusting proportion.")
+    update.message.reply_text("Please enter the amount you want to invest (minumum 100 USDT).")
+    return UPDATEPROP
+
+
+def updateProportionReal(update: Update, context: CallbackContext):
+    user = current_users[update.message.chat_id]
+    try:
+        prop = float(update.message.text)
+        assert prop >=100
+    except:
+        update.message.reply_text("This is not a valid amount, please enter again.")
+        return UPDATEPROP
+    newprop = prop/current_stream.get_balance()
+    update.message.reply_text(f"Your newest proportion is {newprop}.")
+    user.change_all_proportion(newprop)
     return ConversationHandler.END
 
 
@@ -3188,6 +3212,7 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
+
     conv_handler9 = ConversationHandler(
         entry_points=[CommandHandler("setproportion", set_proportion)],
         states={
@@ -3294,6 +3319,15 @@ def main():
         states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
         fallbacks=[CommandHandler("cancel", cancel)],
     )
+    conv_handler24 = ConversationHandler(
+        entry_points=[CommandHandler("updateproportion", update_proportion)],
+        states={
+            UPDATEPROP: [
+                MessageHandler(Filters.text & ~Filters.command, updateProportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
     global current_stream
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
@@ -3313,6 +3347,7 @@ def main():
     dispatcher.add_handler(conv_handler19)
     dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(conv_handler23)
+    dispatcher.add_handler(conv_handler24)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
