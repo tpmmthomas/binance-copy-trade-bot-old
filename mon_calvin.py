@@ -483,7 +483,7 @@ def check_ratio(update: Update, context: CallbackContext):
         ratio = float(update.message.text)
         assert ratio >= 100
         ratio = ratio / current_stream.get_balance()
-        ratio = round(ratio, 5)
+        ratio = round(ratio, 6)
     except:
         update.message.reply_text(
             "Sorry, you amount is wrong or too small (minimum 100 USDT). Please reenter."
@@ -743,6 +743,7 @@ def updateProportionReal(update: Update, context: CallbackContext):
         update.message.reply_text("This is not a valid amount, please enter again.")
         return UPDATEPROP
     newprop = prop/current_stream.get_balance()
+    newprop = round_up(newprop,6)
     update.message.reply_text(f"Your newest proportion is {newprop}.")
     user.change_all_proportion(newprop)
     return ConversationHandler.END
