@@ -5321,7 +5321,7 @@ def restore_save_data():
                 api_key=x["api_key"],
                 api_secret=x["api_secret"],
                 tplatform=x["platform"],
-                # slippage=x["slippage"],
+                slippage=x["slippage"],
             )
         else:
             CurrentUsers[x["chat_id"]] = users(
@@ -5331,7 +5331,7 @@ def restore_save_data():
                 api_key=x["api_key"],
                 api_secret=x["api_secret"],
                 tplatform=x["platform"],
-                # slippage=x["slippage"],
+                slippage=x["slippage"],
             )
         for i in range(0, len(x["profiles"])):
             time.sleep(4)
