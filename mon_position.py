@@ -524,7 +524,7 @@ class FetchLatestPosition(threading.Thread):
                             except:
                                 exp = 0
                             if changesize / newsize < 0.05:
-                                executePrice.append(newentry)
+                                executePrice.append(newmark)
                             else:
                                 executePrice.append(exp)
                         else:
@@ -556,7 +556,7 @@ class FetchLatestPosition(threading.Thread):
                             except:
                                 exp = 0
                             if changesize / newsize < 0.05:
-                                executePrice.append(newentry)
+                                executePrice.append(newmark)
                             else:
                                 executePrice.append(exp)
                         df2 = df2.drop(r)
