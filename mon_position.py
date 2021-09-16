@@ -523,7 +523,10 @@ class FetchLatestPosition(threading.Thread):
                                 ) / changesize
                             except:
                                 exp = 0
-                            executePrice.append(exp)
+                            if changesize / newsize < 0.05:
+                                executePrice.append(newentry)
+                            else:
+                                executePrice.append(exp)
                         else:
                             txtype.append("CloseLong")
                             txsymbol.append(df2row[0])
@@ -552,7 +555,10 @@ class FetchLatestPosition(threading.Thread):
                                 ) / changesize
                             except:
                                 exp = 0
-                            executePrice.append(exp)
+                            if changesize / newsize < 0.05:
+                                executePrice.append(newentry)
+                            else:
+                                executePrice.append(exp)
                         df2 = df2.drop(r)
                         hasChanged = True
                         break
@@ -3689,6 +3695,7 @@ class AAXClient:
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
             if (
                 isOpen
+                and float(target_price) != 0
                 and (abs(float(target_price) - latest_price) / float(target_price))
                 > self.slippage
             ):
@@ -4289,6 +4296,7 @@ class BybitClient:
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
             if (
                 isOpen
+                and float(target_price) != 0
                 and (abs(float(target_price) - latest_price) / float(target_price))
                 > self.slippage
             ):
@@ -4990,6 +4998,7 @@ class BinanceClient:
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
             if (
                 isOpen
+                and float(target_price) != 0
                 and (abs(float(target_price) - latest_price) / float(target_price))
                 > self.slippage
             ):
