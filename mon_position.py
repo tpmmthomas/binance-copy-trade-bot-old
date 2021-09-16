@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 (
     AUTH,
+    SLIPPAGE,
     CLOSEALL,
     SEP1,
     SEP2,
@@ -97,7 +98,7 @@ logger = logging.getLogger(__name__)
     SEP3,
     CP1,
     PLATFORM,
-) = range(55)
+) = range(56)
 CurrentUsers = {}
 updater = Updater(cnt.bot_token)
 master_lock = threading.Semaphore(2)
@@ -1291,7 +1292,7 @@ def initTraderThread(
     if toTrade:
         updater.bot.sendMessage(
             chat_id=chat_id,
-            text="*All your proportions have been set to 0x and all leverage has ben set to 20x (if applicable). Change these settings with extreme caution.*",
+            text="*All your proportions have been set to 0x , all leverage has ben set to 20x (if applicable), and your slippage has been set to 0.05. Change these settings with extreme caution.*",
             parse_mode=telegram.ParseMode.MARKDOWN,
         )
 
@@ -1779,6 +1780,7 @@ def save_to_file(update: Update, context: CallbackContext):
                 "chat_id": user.chat_id,
                 "profiles": traderProfiles,
                 "safety_ratrio": user.bclient.safety_ratio,
+                "slippage": user.bclient.slippage,
                 "api_key": user.api_key,
                 "api_secret": user.api_secret,
                 "platform": user.tplatform,
@@ -2491,6 +2493,27 @@ def confirm_changesafety(update: Update, context: CallbackContext):
     return ConversationHandler.END
 
 
+def change_slippage(update: Update, context: CallbackContext):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return ConversationHandler.END
+    update.message.reply_text("Please enter the slippage (between 0 and 1):")
+    return SLIPPAGE
+
+
+def confirm_changeslippage(update: Update, context: CallbackContext):
+    try:
+        safety_ratio = float(update.message.text)
+        assert safety_ratio >= 0 and safety_ratio <= 1
+    except:
+        update.message.reply_text("This is not a valid ratio, please enter again.")
+        return SLIPPAGE
+    UserLocks[update.message.chat_id].acquire()
+    CurrentUsers[update.message.chat_id].bclient.change_slippage(safety_ratio)
+    UserLocks[update.message.chat_id].release()
+    return ConversationHandler.END
+
+
 def set_all_tpsl(update: Update, context: CallbackContext):
     if not update.message.chat_id in CurrentUsers:
         update.message.reply_text("Please initalize with /start first.")
@@ -3007,6 +3030,17 @@ def error_callback(update, context):
     t1.start()
 
 
+def query_setting(update, context):
+    if not update.message.chat_id in CurrentUsers:
+        update.message.reply_text("Please initalize with /start first.")
+        return
+    user = CurrentUsers[update.message.chat_id]
+    update.message.reply_text(
+        f"Your safety ratio is set as {user.bclient.safety_ratio}, and your slippage is {user.bclient.slippage}."
+    )
+    return
+
+
 def reload_updater():
     global updater
     global reloading
@@ -3269,6 +3303,15 @@ def reload_updater():
         states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
         fallbacks=[CommandHandler("cancel", cancel)],
     )
+    conv_handler24 = ConversationHandler(
+        entry_points=[CommandHandler("changeslip", change_slippage)],
+        states={
+            SLIPPAGE: [
+                MessageHandler(Filters.text & ~Filters.command, confirm_changeslippage)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler3)
@@ -3292,11 +3335,13 @@ def reload_updater():
     dispatcher.add_handler(conv_handler21)
     dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(conv_handler23)
+    dispatcher.add_handler(conv_handler24)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
+    dispatcher.add_handler(CommandHandler("settingquery", query_setting))
     dispatcher.add_error_handler(error_callback)
     updater = updater2
     try:
@@ -3313,13 +3358,14 @@ def reload_updater():
 
 
 class AAXClient:
-    def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
+    def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret, slippage):
         self.auth = Auth(api_key, api_secret)
         self.chat_id = chat_id
         self.uname = uname
         self.stepsize = {}
         self.ticksize = {}
         self.safety_ratio = safety_ratio
+        self.slippage = slippage
         info = requests.get("https://api.aax.com/v2/instruments").json()
         self.isReloaded = False
         self.allPositions = {}
@@ -3641,6 +3687,17 @@ class AAXClient:
             if isinstance(tradeinfo[3], str):
                 tradeinfo[3] = tradeinfo[3].replace(",", "")
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
+            if (
+                isOpen
+                and (abs(float(target_price) - latest_price) / float(target_price))
+                > self.slippage
+            ):
+                if not mute:
+                    updater.bot.sendMessage(
+                        self.chat_id,
+                        f"This trade will not be executed because it exceeds your maximum slippage ({self.slippage}). \n(Trader's price {target_price}, current price {latest_price})",
+                    )
+                continue
             if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]] == 2 and not isOpen):
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\ntype: MARKET\nquantity: {quant}"
@@ -3788,15 +3845,24 @@ class AAXClient:
     def round_up(self, quant, minsize):
         return math.ceil(quant / minsize)
 
+    def change_slippage(self, slippage):
+        logger.info(f"{self.uname} changed slippage.")
+        self.slippage = slippage
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="Successfully changed slippage."
+        )
+        return
+
 
 class BybitClient:
-    def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
+    def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret, slippage):
         self.client = bybit.bybit(test=False, api_key=api_key, api_secret=api_secret)
         self.chat_id = chat_id
         self.uname = uname
         self.stepsize = {}
         self.ticksize = {}
         self.safety_ratio = safety_ratio
+        self.slippage = slippage
         self.isReloaded = False
         res = self.client.Symbol.Symbol_get().result()[0]
         for symbol in res["result"]:
@@ -4221,6 +4287,17 @@ class BybitClient:
             if isinstance(tradeinfo[3], str):
                 tradeinfo[3] = tradeinfo[3].replace(",", "")
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
+            if (
+                isOpen
+                and (abs(float(target_price) - latest_price) / float(target_price))
+                > self.slippage
+            ):
+                if not mute:
+                    updater.bot.sendMessage(
+                        self.chat_id,
+                        f"This trade will not be executed because it exceeds your maximum slippage. \n(Trader's price {target_price}, current price {latest_price})",
+                    )
+                continue
             if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]] == 2 and not isOpen):
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
@@ -4387,15 +4464,24 @@ class BybitClient:
         multiplier = 10 ** decimals
         return math.ceil(n * multiplier) / multiplier
 
+    def change_slippage(self, slippage):
+        logger.info(f"{self.uname} changed slippage.")
+        self.slippage = slippage
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="Successfully changed slippage."
+        )
+        return
+
 
 class BinanceClient:
-    def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret):
+    def __init__(self, chat_id, uname, safety_ratio, api_key, api_secret, slippage):
         self.client = Client(api_key, api_secret)
         self.chat_id = chat_id
         self.uname = uname
         self.stepsize = {}
         self.ticksize = {}
         self.safety_ratio = safety_ratio
+        self.slippage = slippage
         info = self.client.futures_exchange_info()
         self.isReloaded = False
         try:
@@ -4902,6 +4988,17 @@ class BinanceClient:
             if isinstance(tradeinfo[3], str):
                 tradeinfo[3] = tradeinfo[3].replace(",", "")
             target_price = "{:0.0{}f}".format(float(tradeinfo[3]), reqticksize)
+            if (
+                isOpen
+                and (abs(float(target_price) - latest_price) / float(target_price))
+                > self.slippage
+            ):
+                if not mute:
+                    updater.bot.sendMessage(
+                        self.chat_id,
+                        f"This trade will not be executed because it exceeds your maximum slippage ({self.slippage}). \n(Trader's price {target_price}, current price {latest_price})",
+                    )
+                continue
             if tmodes[tradeinfo[1]] == 0 or (tmodes[tradeinfo[1]] == 2 and not isOpen):
                 try:
                     tosend = f"Trying to execute the following trade:\nSymbol: {tradeinfo[1]}\nSide: {side}\npositionSide: {positionSide}\ntype: MARKET\nquantity: {quant}"
@@ -5041,6 +5138,14 @@ class BinanceClient:
         )
         return
 
+    def change_slippage(self, slippage):
+        logger.info(f"{self.uname} changed slippage.")
+        self.slippage = slippage
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="Successfully changed slippage."
+        )
+        return
+
     def get_balance(self, out=True):
         try:
             result = self.client.futures_account()["assets"]
@@ -5079,25 +5184,29 @@ class users:
         tmode=None,
         lmode=None,
         tplatform=0,
+        slippage=0.05,
     ):
         self.chat_id = chat_id
         self.is_handling = False
         self.uname = uname
         self.safety_ratio = safety_ratio
+        self.slippage = slippage
         self.api_key = api_key  # actually required, but I don't want to change
         self.threads = []
         self.tpslids = {}
         self.api_secret = api_secret
         self.tplatform = tplatform
         if self.tplatform == 1:
-            self.bclient = AAXClient(chat_id, uname, safety_ratio, api_key, api_secret)
+            self.bclient = AAXClient(
+                chat_id, uname, safety_ratio, api_key, api_secret, slippage
+            )
         elif self.tplatform == 2:
             self.bclient = BybitClient(
-                chat_id, uname, safety_ratio, api_key, api_secret
+                chat_id, uname, safety_ratio, api_key, api_secret, slippage
             )
         else:
             self.bclient = BinanceClient(
-                chat_id, uname, safety_ratio, api_key, api_secret
+                chat_id, uname, safety_ratio, api_key, api_secret, slippage
             )
         listsymbols = self.bclient.get_symbols()
         if init_trader is None:
@@ -5212,6 +5321,7 @@ def restore_save_data():
                 api_key=x["api_key"],
                 api_secret=x["api_secret"],
                 tplatform=x["platform"],
+                # slippage=x["slippage"],
             )
         else:
             CurrentUsers[x["chat_id"]] = users(
@@ -5221,6 +5331,7 @@ def restore_save_data():
                 api_key=x["api_key"],
                 api_secret=x["api_secret"],
                 tplatform=x["platform"],
+                # slippage=x["slippage"],
             )
         for i in range(0, len(x["profiles"])):
             time.sleep(4)
@@ -5507,6 +5618,15 @@ def main() -> None:
         states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
         fallbacks=[CommandHandler("cancel", cancel)],
     )
+    conv_handler24 = ConversationHandler(
+        entry_points=[CommandHandler("changeslip", change_slippage)],
+        states={
+            SLIPPAGE: [
+                MessageHandler(Filters.text & ~Filters.command, confirm_changeslippage)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler3)
@@ -5530,11 +5650,13 @@ def main() -> None:
     dispatcher.add_handler(conv_handler21)
     dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(conv_handler23)
+    dispatcher.add_handler(conv_handler24)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("checkinterval", check_waittime))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
+    dispatcher.add_handler(CommandHandler("settingquery", query_setting))
     dispatcher.add_error_handler(error_callback)
     web_scraper.start()
     # TODO: add /end command

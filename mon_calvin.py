@@ -724,13 +724,16 @@ def setAllProportionReal(update: Update, context: CallbackContext):
     user.change_all_proportion(prop)
     return ConversationHandler.END
 
+
 def update_proportion(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} adjusting proportion.")
-    update.message.reply_text("Please enter the amount you want to invest (minumum 100 USDT).")
+    update.message.reply_text(
+        "Please enter the amount you want to invest (minumum 100 USDT)."
+    )
     return UPDATEPROP
 
 
@@ -738,12 +741,12 @@ def updateProportionReal(update: Update, context: CallbackContext):
     user = current_users[update.message.chat_id]
     try:
         prop = float(update.message.text)
-        assert prop >=100
+        assert prop >= 100
     except:
         update.message.reply_text("This is not a valid amount, please enter again.")
         return UPDATEPROP
-    newprop = prop/current_stream.get_balance()
-    newprop = round_up(newprop,6)
+    newprop = prop / current_stream.get_balance()
+    newprop = round_up(newprop, 6)
     update.message.reply_text(f"Your newest proportion is {newprop}.")
     user.change_all_proportion(newprop)
     return ConversationHandler.END
