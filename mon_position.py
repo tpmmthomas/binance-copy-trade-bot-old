@@ -228,12 +228,16 @@ class WebScraping(threading.Thread):
         self.driver = webdriver.Chrome(cfg.driver_location, options=options)
         self.i = 0
         self.isStop = threading.Event()
+        self.pauseload = threading.Event()
         self.cond = {}
         # self.thislock = threading.Lock()
 
     def run(self):
         global avgwaittime
         while not self.isStop.is_set():
+            if self.pauseload.is_set():
+                time.sleep(5)
+                continue
             try:
                 start = datetime.now()
                 numdo = self.num_dos.copy()
@@ -277,6 +281,12 @@ class WebScraping(threading.Thread):
 
     def stop(self):
         self.isStop.set()
+
+    def pause(self):
+        self.pauseload.set()
+
+    def resume(self):
+        self.pauseload.clear()
 
     def add(self, url):
         # self.thislock.acquire()
@@ -3018,8 +3028,12 @@ def viewpnlstat(update: Update, context: CallbackContext):
     return
 
 
+is_reloading = False
+
+
 def error_callback(update, context):
     logger.error("Error!!!!!Why!!!")
+    web_scraper.pause()
     time.sleep(5)
     save_to_file(None, None)
     global reloading
@@ -3032,8 +3046,11 @@ def error_callback(update, context):
         updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
     CurrentUsers = {}
     logger.info("Everyone's service has ended.")
-    t1 = threading.Thread(target=reload_updater)
-    t1.start()
+    if not is_reloading:
+        t1 = threading.Thread(target=reload_updater)
+        t1.start()
+        global is_reloading
+        is_reloading = True
 
 
 def query_setting(update, context):
@@ -3050,6 +3067,7 @@ def query_setting(update, context):
 def reload_updater():
     global updater
     global reloading
+    global is_reloading
     updater.stop()
     updater.is_idle = False
     time.sleep(2)
@@ -3350,13 +3368,14 @@ def reload_updater():
     dispatcher.add_handler(CommandHandler("settingquery", query_setting))
     dispatcher.add_error_handler(error_callback)
     updater = updater2
+    web_scraper.resume()
     try:
         restore_save_data()
     except:
         logger.info("No data to restore.")
     reloading = False
     updater.start_polling()
-
+    is_reloading = False
     # Run the bot until you press Ctrl-C or the process receives SIGINT,
     # SIGTERM or SIGABRT. This should be used most of the time, since
     # start_polling() is non-blocking and will stop the bot gracefully.
