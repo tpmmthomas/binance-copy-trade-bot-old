@@ -116,6 +116,7 @@ options.add_argument("--disable-dev-shm-usage")
 UserLocks = {}
 avgwaittime = (0, 0)
 reloader = None
+is_reloading = False
 
 
 def format_results(x, y):
@@ -3028,11 +3029,9 @@ def viewpnlstat(update: Update, context: CallbackContext):
     return
 
 
-is_reloading = False
-
-
 def error_callback(update, context):
     logger.error("Error!!!!!Why!!!")
+    global is_reloading
     web_scraper.pause()
     time.sleep(5)
     save_to_file(None, None)
@@ -3049,7 +3048,6 @@ def error_callback(update, context):
     if not is_reloading:
         t1 = threading.Thread(target=reload_updater)
         t1.start()
-        global is_reloading
         is_reloading = True
 
 
