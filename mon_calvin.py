@@ -3170,6 +3170,7 @@ def restore_save_data():
 is_reloading = False
 reloading = False
 
+
 def error_callback(update, context):
     logger.error("Error!!!!!Why!!!")
     current_stream.pause()
@@ -3197,7 +3198,7 @@ def reload_updater():
     updater.stop()
     updater.is_idle = False
     time.sleep(2)
-    updater2 = Updater(cnt.bot_token)
+    updater2 = Updater(cnt.bot_token2)
     dispatcher = updater2.dispatcher
     # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
     conv_handler = ConversationHandler(
@@ -3405,6 +3406,7 @@ def reload_updater():
     reloading = False
     updater.start_polling()
     is_reloading = False
+
 
 def main():
     dispatcher = updater.dispatcher
