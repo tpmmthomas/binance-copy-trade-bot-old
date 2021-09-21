@@ -122,6 +122,7 @@ class getStreamData(threading.Thread):
         threading.Thread.__init__(self)
         self.client = Client(cnt.api_key, cnt.api_secret)
         self.lastPositions = None
+        self.pauseload = threading.Event()
 
     def get_balance(self):
         result = self.client.futures_account()["assets"]
@@ -132,6 +133,8 @@ class getStreamData(threading.Thread):
     def run(self):
         while True:
             time.sleep(4)
+            if self.pauseload.is_set():
+                continue
             try:
                 result = self.client.futures_position_information()
             except BinanceAPIException as e:
@@ -178,6 +181,12 @@ class getStreamData(threading.Thread):
                 # logger.info("Yes")
                 process_newest_position(diff, newPosition, isCloseAll)
             self.lastPositions = newPosition
+
+    def pause(self):
+        self.pauseload.set()
+
+    def resume(self):
+        self.pauseload.clear()
 
     def compare(self, df, df2):
         if df is None or df2 is None:
@@ -3158,6 +3167,245 @@ def restore_save_data():
         )
 
 
+is_reloading = False
+reloading = False
+
+def error_callback(update, context):
+    logger.error("Error!!!!!Why!!!")
+    current_stream.pause()
+    global is_reloading
+    time.sleep(5)
+    save_to_file(None, None)
+    global reloading
+    reloading = True
+    global current_users
+    for user in current_users:
+        user = current_users[user]
+        updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
+    current_users = {}
+    logger.info("Everyone's service has ended.")
+    if not is_reloading:
+        t1 = threading.Thread(target=reload_updater)
+        t1.start()
+        is_reloading = True
+
+
+def reload_updater():
+    global updater
+    global reloading
+    global is_reloading
+    updater.stop()
+    updater.is_idle = False
+    time.sleep(2)
+    updater2 = Updater(cnt.bot_token)
+    dispatcher = updater2.dispatcher
+    # Add conversation handler with the states GENDER, PHOTO, LOCATION and BIO
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("start", start)],
+        states={
+            AUTH: [MessageHandler(Filters.text & ~Filters.command, auth_check)],
+            DISCLAIMER: [MessageHandler(Filters.regex("^(yes)$"), disclaimer_check)],
+            PLATFORM: [
+                MessageHandler(Filters.regex("^(1|2|3)$"), check_platform)
+            ],  # DO COME BACK
+            APIKEY: [MessageHandler(Filters.text & ~Filters.command, check_api)],
+            APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
+            CHECKPROP: [MessageHandler(Filters.text & ~Filters.command, check_ratio)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler2 = ConversationHandler(
+        entry_points=[CommandHandler("admin", admin)],
+        states={
+            AUTH2: [MessageHandler(Filters.text & ~Filters.command, auth_check2)],
+            ANNOUNCE: [
+                MessageHandler(Filters.text & ~Filters.command, announce),
+                CommandHandler("save", save_to_file),
+                CommandHandler("endall", end_everyone),
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler6 = ConversationHandler(
+        entry_points=[CommandHandler("setallleverage", setAllLeverage)],
+        states={
+            REALSETLEV: [
+                MessageHandler(Filters.text & ~Filters.command, setAllLeverageReal)
+            ]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler7 = ConversationHandler(
+        entry_points=[CommandHandler("setleverage", set_leverage)],
+        states={
+            LEVTRADER: [
+                MessageHandler(Filters.text & ~Filters.command, leverage_choosesymbol)
+            ],
+            REALSETLEV2: [
+                MessageHandler(Filters.text & ~Filters.command, setLeverageReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler8 = ConversationHandler(
+        entry_points=[CommandHandler("setallproportion", set_all_proportion)],
+        states={
+            ALLPROP: [
+                MessageHandler(Filters.text & ~Filters.command, setAllProportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    conv_handler9 = ConversationHandler(
+        entry_points=[CommandHandler("setproportion", set_proportion)],
+        states={
+            PROPSYM: [
+                MessageHandler(Filters.text & ~Filters.command, proportion_choosesymbol)
+            ],
+            REALSETPROP2: [
+                MessageHandler(Filters.text & ~Filters.command, setProportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler10 = ConversationHandler(
+        entry_points=[CommandHandler("getleverage", get_leverage)],
+        states={
+            REALSETLEV3: [
+                MessageHandler(Filters.text & ~Filters.command, getLeverageReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler11 = ConversationHandler(
+        entry_points=[CommandHandler("getproportion", get_proportion)],
+        states={
+            REALSETLEV4: [
+                MessageHandler(Filters.text & ~Filters.command, getproportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler12 = ConversationHandler(
+        entry_points=[CommandHandler("end", end_all)],
+        states={COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],},
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    # conv_handler13 = ConversationHandler(
+    #     entry_points=[CommandHandler('settmode',set_omode)],
+    #     states={
+    #         PROPSYM2:[MessageHandler(Filters.text & ~Filters.command,omode_choosesymbol)],
+    #         REALSETPROP3:[MessageHandler(Filters.regex('^(0|1|2)$'),setomodeReal)],
+    #     },
+    #     fallbacks=[CommandHandler('cancel', cancel)],
+    # )
+    conv_handler14 = ConversationHandler(
+        entry_points=[CommandHandler("setlmode", set_lmode)],
+        states={REALSETLEV5: [MessageHandler(Filters.regex("^(0|1)$"), setlmodeReal)],},
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    # conv_handler15 = ConversationHandler(
+    #     entry_points=[CommandHandler('setalltmode',set_allomode)],
+    #     states={
+    #         REALSETLEV6:[MessageHandler(Filters.regex('^(0|1|2)$'),setallomodeReal)],
+    #     },
+    #     fallbacks=[CommandHandler('cancel', cancel)],
+    # )
+    conv_handler16 = ConversationHandler(
+        entry_points=[CommandHandler("changesr", change_safetyratio)],
+        states={
+            LEVTRADER6: [
+                MessageHandler(Filters.text & ~Filters.command, confirm_changesafety)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler17 = ConversationHandler(
+        entry_points=[CommandHandler("setalltpsl", set_all_tpsl)],
+        states={
+            REALSETPROP4: [
+                MessageHandler(Filters.text & ~Filters.command, setAllTpslReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler18 = ConversationHandler(
+        entry_points=[CommandHandler("settpsl", set_tpsl)],
+        states={
+            PROPSYM3: [
+                MessageHandler(Filters.text & ~Filters.command, tpsl_choosesymbol)
+            ],
+            REALSETPROP5: [
+                MessageHandler(Filters.text & ~Filters.command, setTpslReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler19 = ConversationHandler(
+        entry_points=[CommandHandler("gettpsl", get_tpsl)],
+        states={
+            REALSETLEV7: [MessageHandler(Filters.text & ~Filters.command, getTpslReal)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler22 = ConversationHandler(
+        entry_points=[CommandHandler("changeapi", choose_platform)],
+        states={
+            SEP3: [MessageHandler(Filters.regex("^(1|2|3)$"), change_api)],
+            SEP1: [MessageHandler(Filters.text & ~Filters.command, change_secret)],
+            SEP2: [MessageHandler(Filters.text & ~Filters.command, change_bnall)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler23 = ConversationHandler(
+        entry_points=[CommandHandler("closeposition", close_position)],
+        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    conv_handler24 = ConversationHandler(
+        entry_points=[CommandHandler("updateproportion", update_proportion)],
+        states={
+            UPDATEPROP: [
+                MessageHandler(Filters.text & ~Filters.command, updateProportionReal)
+            ],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+    dispatcher.add_handler(conv_handler)
+    dispatcher.add_handler(conv_handler2)
+    dispatcher.add_handler(conv_handler6)
+    dispatcher.add_handler(conv_handler7)
+    dispatcher.add_handler(conv_handler8)
+    dispatcher.add_handler(conv_handler9)
+    dispatcher.add_handler(conv_handler10)
+    dispatcher.add_handler(conv_handler11)
+    dispatcher.add_handler(conv_handler12)
+    # dispatcher.add_handler(conv_handler13)
+    dispatcher.add_handler(conv_handler14)
+    # dispatcher.add_handler(conv_handler15)
+    dispatcher.add_handler(conv_handler16)
+    dispatcher.add_handler(conv_handler17)
+    dispatcher.add_handler(conv_handler18)
+    dispatcher.add_handler(conv_handler19)
+    dispatcher.add_handler(conv_handler22)
+    dispatcher.add_handler(conv_handler23)
+    dispatcher.add_handler(conv_handler24)
+    dispatcher.add_handler(CommandHandler("help", help_command))
+    dispatcher.add_handler(CommandHandler("view", view_position))
+    dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
+    dispatcher.add_error_handler(error_callback)
+    updater = updater2
+    current_stream.resume()
+    try:
+        restore_save_data()
+    except:
+        logger.info("No data to restore.")
+    reloading = False
+    updater.start_polling()
+    is_reloading = False
+
 def main():
     dispatcher = updater.dispatcher
     conv_handler = ConversationHandler(
@@ -3356,6 +3604,7 @@ def main():
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
+    dispatcher.add_error_handler(error_callback)
     current_stream = getStreamData()
     current_stream.start()
     try:
