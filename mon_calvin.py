@@ -31,6 +31,8 @@ import hmac, hashlib, time, requests
 from multiprocessing import Process
 
 q = queue.Queue(200)
+is_reloading = False
+reloading = False
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -402,7 +404,8 @@ def automatic_reload():
         time.sleep(3 * 60 * 60)
         for user in current_users:
             current_users[user].reload()
-        save_to_file(None, None)
+        if not reloading:
+            save_to_file(None, None)
 
 
 def start(update: Update, context: CallbackContext) -> int:
@@ -3165,10 +3168,6 @@ def restore_save_data():
             x["lmode"],
             x["platform"],
         )
-
-
-is_reloading = False
-reloading = False
 
 
 def error_callback(update, context):
