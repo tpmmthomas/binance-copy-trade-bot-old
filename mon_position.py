@@ -5328,6 +5328,7 @@ class users:
         self.trader_urls.pop(idx)
         self.trader_names.pop(idx)
         self.threads[idx].stop()
+        time.sleep(int(avgwaittime[0])+5)
         self.threads.pop(idx)
 
 

@@ -404,7 +404,7 @@ def automatic_reload():
         time.sleep(3 * 60 * 60)
         for user in current_users:
             current_users[user].reload()
-        if not reloading:
+        if not is_reloading:
             save_to_file(None, None)
 
 
@@ -613,6 +613,9 @@ def save_to_file(update: Update, context: CallbackContext):
 
 
 def view_position(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+        return
     position = current_stream.lastPositions
     bal = float(current_stream.get_balance())
     if position is None:
@@ -3170,6 +3173,16 @@ def restore_save_data():
         )
 
 
+def reload_announcement():
+    position = current_stream.lastPositions
+    for user in current_users:
+        user = current_users[user]
+        updater.bot.sendMessage(
+            user.chat_id, "The bot just got reloaded. Latest position:"
+        )
+        updater.bot.sendMessage(user.chat_id, position.to_string())
+
+
 def error_callback(update, context):
     logger.error("Error!!!!!Why!!!")
     current_stream.pause()
@@ -3403,6 +3416,7 @@ def reload_updater():
     except:
         logger.info("No data to restore.")
     reloading = False
+    reload_announcement()
     updater.start_polling()
     is_reloading = False
 
@@ -3616,6 +3630,7 @@ def main():
     thr.start()
     t2 = threading.Thread(target=save_trading_pnl)
     t2.start()
+    reload_announcement()
     updater.start_polling()
     updater.idle()
 
