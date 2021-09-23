@@ -1172,18 +1172,21 @@ def viewpnlstat(update: Update, context: CallbackContext):
     p1 = Process(target=plotgraph, args=(pastvalue[-daily:], "Daily Balance",))
     p1.start()
     p1.join()
+    time.sleep(0.1)
     with open("1.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     weekly = 7 * 24 * 30
     p2 = Process(target=plotgraph, args=(pastvalue[-weekly:], "Weekly Balance",))
     p2.start()
     p2.join()
+    time.sleep(0.1)
     with open("1.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     monthly = 30 * 7 * 24 * 30
     p3 = Process(target=plotgraph, args=(pastvalue[-monthly:], "Monthly Balance",))
     p3.start()
     p3.join()
+    time.sleep(0.1)
     with open("1.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     piclock.release()
