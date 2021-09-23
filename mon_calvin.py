@@ -1849,7 +1849,7 @@ class AAXClient:
             reqticksize = self.ticksize[tradeinfo[1]]
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant = self.round_up(quant, reqstepsize)
-            print(quant, reqstepsize)
+            # print(quant, reqstepsize)
             collateral = (latest_price * quant * reqstepsize) / leverage[tradeinfo[1]]
             quant = str(quant)
             if isOpen:
@@ -1897,7 +1897,7 @@ class AAXClient:
                         logger.error(f"Error: {response['message']}")
                         continue
                     positionKey = tradeinfo[1] + positionSide
-                    print(response["data"]["orderID"])
+                    # print(response["data"]["orderID"])
                     t1 = threading.Thread(
                         target=self.query_trade,
                         args=(
@@ -2447,7 +2447,7 @@ class BybitClient:
                             ] = 0
                         continue
                     positionKey = tradeinfo[1] + positionSide
-                    print(response["result"]["order_id"])
+                    # print(response["result"]["order_id"])
                     t1 = threading.Thread(
                         target=self.query_trade,
                         args=(
