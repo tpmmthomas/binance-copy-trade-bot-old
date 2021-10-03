@@ -395,7 +395,16 @@ def process_newest_position(diff, df, isCloseAll):
             f"*The positions changed in Kevin's account:*\n" + diff.to_string() + "\n"
         )
         updater.bot.sendMessage(chat_id=chat_id, text=tosend)
-        current_users[chat_id].open_trade(diff, isCloseAll)
+        failOpened = 0
+        while failOpened < 3:
+            try:
+                current_users[chat_id].open_trade(diff, isCloseAll)
+                failOpened = 10
+            except:
+                updater.bot.sendMessage(
+                    chat_id=chat_id, text="Open trade failed, retrying."
+                )
+                failOpened += 1
 
 
 def automatic_reload():
