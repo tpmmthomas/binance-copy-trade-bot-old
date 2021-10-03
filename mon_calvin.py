@@ -3186,13 +3186,17 @@ def restore_save_data():
 
 
 def reload_announcement():
+    time.sleep(10)
     position = current_stream.lastPositions
     for user in current_users:
         user = current_users[user]
         updater.bot.sendMessage(
             user.chat_id, "The bot just got reloaded. Latest position:"
         )
-        updater.bot.sendMessage(user.chat_id, position.to_string())
+        if position is not None:
+            updater.bot.sendMessage(user.chat_id, position.to_string())
+        else:
+            updater.bot.sendMessage(user.chat_id, "None")
 
 
 def error_callback(update, context):
