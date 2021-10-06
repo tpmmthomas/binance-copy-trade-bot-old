@@ -100,7 +100,9 @@ logger = logging.getLogger(__name__)
     PLATFORM,
 ) = range(56)
 CurrentUsers = {}
-updater = Updater(cnt.bot_token)
+updater = Updater(
+    cnt.bot_token, request_kwargs={"read_timeout": 30, "connect_timeout": 30}
+)
 master_lock = threading.Semaphore(2)
 mutex = threading.Lock()
 options = webdriver.ChromeOptions()
@@ -3038,14 +3040,14 @@ def error_callback(update, context):
     global reloading
     reloading = True
     global CurrentUsers
-    for user in CurrentUsers:
-        user = CurrentUsers[user]
-        for thread in user.threads:
-            thread.stop()
-        updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
-    CurrentUsers = {}
-    logger.info("Everyone's service has ended.")
     if not is_reloading:
+        for user in CurrentUsers:
+            user = CurrentUsers[user]
+            for thread in user.threads:
+                thread.stop()
+            updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
+        CurrentUsers = {}
+        logger.info("Everyone's service has ended.")
         t1 = threading.Thread(target=reload_updater)
         t1.start()
         is_reloading = True
@@ -5328,7 +5330,7 @@ class users:
         self.trader_urls.pop(idx)
         self.trader_names.pop(idx)
         self.threads[idx].stop()
-        time.sleep(int(avgwaittime[0])+5)
+        time.sleep(int(avgwaittime[0]) + 5)
         self.threads.pop(idx)
 
 
