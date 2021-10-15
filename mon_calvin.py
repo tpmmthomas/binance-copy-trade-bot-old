@@ -122,15 +122,20 @@ def show_positions():
 class getStreamData(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
-        self.client = Client(cnt.api_key, cnt.api_secret)
+        self.client = bybit.bybit(
+            test=False, api_key=cnt.api_key, api_secret=cnt.api_secret
+        )
         self.lastPositions = None
         self.pauseload = threading.Event()
 
     def get_balance(self):
-        result = self.client.futures_account()["assets"]
-        for asset in result:
-            if asset["asset"] == "USDT":
-                return float(asset["marginBalance"])
+        try:
+            result = self.client.Wallet.Wallet_getBalance(coin="USDT").result()[0][
+                "result"
+            ]["USDT"]["equity"]
+            return float(result)
+        except:
+            return -1
 
     def run(self):
         while True:
@@ -138,11 +143,11 @@ class getStreamData(threading.Thread):
             if self.pauseload.is_set():
                 continue
             try:
-                result = self.client.futures_position_information()
-            except BinanceAPIException as e:
-                logger.error("Cannot retrieve latest position.")
-                logger.error(str(e))
-                continue
+                result = self.client.LinearPositions.LinearPositions_myPosition().result()[
+                    0
+                ][
+                    "result"
+                ]
             except:
                 logger.error("Other errors")
                 continue
@@ -154,13 +159,15 @@ class getStreamData(threading.Thread):
             margin = []
             listTradingSymbols = []
             for pos in result:
-                if float(pos["positionAmt"]) != 0:
+                pos = pos["data"]
+                if float(pos["size"]) != 0:
                     symbol.append(pos["symbol"])
-                    tsize = pos["positionAmt"]
+                    tsize = pos["size"]
+                    tsize = tsize if pos["side"] == "Buy" else -tsize
                     size.append(tsize)
-                    EnPrice.append(pos["entryPrice"])
-                    MarkPrice.append(pos["markPrice"])
-                    PNL.append(pos["unRealizedProfit"])
+                    EnPrice.append(pos["entry_price"])
+                    MarkPrice.append(pos["position_value"])
+                    PNL.append(pos["unrealised_pnl"])
                     margin.append(pos["leverage"])
                     listTradingSymbols.append(pos["symbol"])
                     for user in current_users:
@@ -3218,7 +3225,8 @@ def error_callback(update, context):
         t1.start()
         is_reloading = True
 
-#q
+
+# q
 def reload_updater():
     global updater
     global reloading
