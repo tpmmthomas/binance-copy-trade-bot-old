@@ -3978,7 +3978,7 @@ class BybitClient:
                 tsize = tsize if pos["side"] == "Buy" else -tsize
                 size.append(tsize)
                 EnPrice.append(pos["entry_price"])
-                MarkPrice.append(pos["position_value"])
+                MarkPrice.append(pos["position_value"] / pos["size"])
                 PNL.append(pos["unrealised_pnl"])
                 margin.append(pos["leverage"])
         newPosition = pd.DataFrame(
