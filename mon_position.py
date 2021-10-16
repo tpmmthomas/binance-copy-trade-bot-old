@@ -3958,9 +3958,55 @@ class BybitClient:
         return
 
     def get_positions(self):
-        updater.bot.sendMessage(
-            chat_id=self.chat_id, text="This feature has not been implemented yet!"
+        try:
+            result = self.client.LinearPositions.LinearPositions_myPosition().result()[
+                0
+            ]["result"]
+        except:
+            logger.error("Other errors")
+        symbol = []
+        size = []
+        EnPrice = []
+        MarkPrice = []
+        PNL = []
+        margin = []
+        for pos in result:
+            pos = pos["data"]
+            if float(pos["size"]) != 0:
+                symbol.append(pos["symbol"])
+                tsize = pos["size"]
+                tsize = tsize if pos["side"] == "Buy" else -tsize
+                size.append(tsize)
+                EnPrice.append(pos["entry_price"])
+                MarkPrice.append(pos["position_value"])
+                PNL.append(pos["unrealised_pnl"])
+                margin.append(pos["leverage"])
+        newPosition = pd.DataFrame(
+            {
+                "symbol": symbol,
+                "size": size,
+                "Entry Price": EnPrice,
+                "Mark Price": MarkPrice,
+                "PNL": PNL,
+                "leverage": margin,
+            }
         )
+        numrows = newPosition.shape[0]
+        if numrows <= 10:
+            tosend = f"Your current Position: " + "\n" + newPosition.to_string() + "\n"
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+        else:
+            firstdf = newPosition.iloc[0:10]
+            tosend = (
+                f"Your current Position: " + "\n" + firstdf.to_string() + "\n(cont...)"
+            )
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+            for i in range(numrows // 10):
+                seconddf = newPosition.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
+                if not seconddf.empty:
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id, text=seconddf.to_string()
+                    )
         return
 
     def tpsl_trade(
