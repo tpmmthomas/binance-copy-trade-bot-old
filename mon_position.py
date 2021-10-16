@@ -2904,15 +2904,18 @@ def change_bnall(update: Update, context: CallbackContext):
             user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
         )
     elif context.user_data["platform"] == 2:
+        logger.info("Problem 1")
         user.bclient = BybitClient(
             user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
         )
+        logger.info("Problem 2")
     else:
         user.bclient = BinanceClient(
             user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
         )
     for trader in user.threads:
         trader.reload()
+    logger.info("Problem 3")
     user.tplatform = context.user_data["platform"]
     update.message.reply_text(
         "Success! If you changed platforms, your proportions and leverages might be reset. Please change them back accordingly."
