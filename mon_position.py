@@ -2901,17 +2901,33 @@ def change_bnall(update: Update, context: CallbackContext):
     user.api_secret = update.message.text
     if context.user_data["platform"] == 1:
         user.bclient = AAXClient(
-            user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
+            user.chat_id,
+            user.uname,
+            user.safety_ratio,
+            user.api_key,
+            user.api_secret,
+            0.1,
         )
     elif context.user_data["platform"] == 2:
         logger.info("Problem 1")
         user.bclient = BybitClient(
-            user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
+            user.chat_id,
+            user.uname,
+            user.safety_ratio,
+            user.api_key,
+            user.api_secret,
+            0.1,
         )
+        # self, chat_id, uname, safety_ratio, api_key, api_secret, slippage)
         logger.info("Problem 2")
     else:
         user.bclient = BinanceClient(
-            user.chat_id, user.uname, user.safety_ratio, user.api_key, user.api_secret
+            user.chat_id,
+            user.uname,
+            user.safety_ratio,
+            user.api_key,
+            user.api_secret,
+            0.1,
         )
     for trader in user.threads:
         trader.reload()
@@ -3054,6 +3070,8 @@ def error_callback(update, context):
         t1 = threading.Thread(target=reload_updater)
         t1.start()
         is_reloading = True
+    else:
+        reloading = False
 
 
 def query_setting(update, context):
