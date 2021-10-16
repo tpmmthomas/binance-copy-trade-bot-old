@@ -4502,7 +4502,7 @@ class BybitClient:
                 tosend = f"Your USDT account balance:\nBalance: {result['equity']}\nAvailable: {result['available_balance']}\nRealised PNL: {result['realised_pnl']}\nUnrealized PNL: {result['unrealised_pnl']}"
                 updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
             else:
-                return float(result["available_balance"])
+                return float(result["equity"])
         except:
             updater.bot.sendMessage(
                 chat_id=self.chat_id, text="Unable to retrieve balance."
