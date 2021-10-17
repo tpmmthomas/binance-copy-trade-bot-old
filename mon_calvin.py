@@ -127,6 +127,7 @@ class getStreamData(threading.Thread):
         )
         self.lastPositions = None
         self.pauseload = threading.Event()
+        self.isnopos = 0
 
     def get_balance(self):
         try:
@@ -166,7 +167,7 @@ class getStreamData(threading.Thread):
                     tsize = tsize if pos["side"] == "Buy" else -tsize
                     size.append(tsize)
                     EnPrice.append(pos["entry_price"])
-                    MarkPrice.append(pos["position_value"]/pos['size'])
+                    MarkPrice.append(pos["position_value"] / pos["size"])
                     PNL.append(pos["unrealised_pnl"])
                     margin.append(pos["leverage"])
                     listTradingSymbols.append(pos["symbol"])
@@ -185,10 +186,14 @@ class getStreamData(threading.Thread):
                     "leverage": margin,
                 }
             )
+            if len(symbol) == 0 and self.isnopos < 3:
+                self.isnopos += 1
+                continue
             isDiff, diff, isCloseAll = self.compare(self.lastPositions, newPosition)
             if isDiff and not diff.empty:
                 # logger.info("Yes")
                 process_newest_position(diff, newPosition, isCloseAll)
+            self.isnopos = 0
             self.lastPositions = newPosition
 
     def pause(self):
