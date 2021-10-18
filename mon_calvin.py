@@ -159,6 +159,8 @@ class getStreamData(threading.Thread):
             PNL = []
             margin = []
             listTradingSymbols = []
+            if result is None:
+                continue
             for pos in result:
                 pos = pos["data"]
                 if float(pos["size"]) != 0:
