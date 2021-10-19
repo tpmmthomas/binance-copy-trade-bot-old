@@ -1322,7 +1322,10 @@ def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
     current_users[update.message.chat_id].client.get_balance()
-
+    if update.message.chat_id in current_users_subaccount:
+        for i, clientx in enumerate(current_users_subaccount[update.message.chat_id]):
+            update.message.reply_text(f"Balance for sub_account #{i+1}:")
+            clientx.client.get_balance()
     return
 
 
