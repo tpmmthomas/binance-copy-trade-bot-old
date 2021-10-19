@@ -508,6 +508,7 @@ def add_sub_account(update: Update, context: CallbackContext):
         "Please choose the platform:\n1. AAX\n2. Bybit\n3.Binance\nPlease enter your choice (1,2,3)"
     )
     context.user_data["is_sub"] = True
+    context.user_data["uname"] = update.message.from_user.first_name
     return PLATFORM
 
 
@@ -1321,6 +1322,7 @@ def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
     current_users[update.message.chat_id].client.get_balance()
+
     return
 
 
