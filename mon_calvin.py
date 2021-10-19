@@ -571,7 +571,9 @@ def check_ratio(update: Update, context: CallbackContext):
         if update.message.chat_id not in current_users_subaccount:
             current_users_subaccount[update.message.chat_id] = []
         logger.error("B")
-        logger.info(f'f{update.message.chat_id},{context.user_data["uname"]},{context.user_data["api_key"]},{context.user_data["api_secret"]},{ratio},{context.user_data["platform"]}')
+        logger.info(
+            f'f{update.message.chat_id},{context.user_data["uname"]},{context.user_data["api_key"]},{context.user_data["api_secret"]},{ratio},{context.user_data["platform"]}'
+        )
         client = userClient(
             update.message.chat_id,
             context.user_data["uname"],
