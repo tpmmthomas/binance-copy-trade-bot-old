@@ -3249,6 +3249,7 @@ def restore_save_data():
     with open("userdata_calvin.pickle", "rb") as f:
         userdata = pickle.load(f)
     for x in userdata:
+        logger.info(f"Updating {x['uname']}'s data")
         if x["chat_id"] not in current_users:
             current_users[x["chat_id"]] = userClient(
                 x["chat_id"],
