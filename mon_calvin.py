@@ -1317,6 +1317,13 @@ def change_bnall(update: Update, context: CallbackContext):
     )
     return ConversationHandler.END
 
+def delete_sub_account(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+    if update.message.chat_id in current_users_subaccount:
+        del current_users_subaccount[update.message.chat_id]
+    update.message.reply_text("All subaccounts have been deleted.")
+    return 
 
 def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
@@ -3548,6 +3555,7 @@ def reload_updater():
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
+    dispatcher.add_handler(CommandHandler("deletesubaccount", delete_sub_account))
     dispatcher.add_error_handler(error_callback)
     updater = updater2
     current_stream.resume()
@@ -3772,6 +3780,7 @@ def main():
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
+    dispatcher.add_handler(CommandHandler("deletesubaccount", delete_sub_account))
     dispatcher.add_error_handler(error_callback)
     current_stream = getStreamData()
     current_stream.start()
