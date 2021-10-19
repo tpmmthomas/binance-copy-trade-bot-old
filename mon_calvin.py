@@ -566,8 +566,10 @@ def check_ratio(update: Update, context: CallbackContext):
         "By default, you will follow exactly every order made in Kevin's account, except the quantity will be multiplied by the proportion. You may adjust the settings including leverage, proportion, take_profit, stop_loss etc, but do that with EXTREME CAUTION. Use the Menu to see the available settings."
     )
     if context.user_data["is_sub"]:
+        logger.error("A")
         if update.message.chat_id not in current_users_subaccount:
             current_users_subaccount[update.message.chat_id] = []
+        logger.error("B")
         client = userClient(
             update.message.chat_id,
             context.user_data["uname"],
@@ -577,7 +579,9 @@ def check_ratio(update: Update, context: CallbackContext):
             ratio,
             tplatform=context.user_data["platform"],
         )
+        logger.error("C")
         current_users_subaccount[update.message.chat_id].append(client)
+        logger.error("D")
     else:
         current_users[update.message.chat_id] = userClient(
             update.message.chat_id,
