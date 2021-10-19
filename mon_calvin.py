@@ -43,6 +43,10 @@ logging.basicConfig(
     PLATFORM,
     CHECKPROP,
     COCO,
+    PLATFORM9,
+    APIKEY9,
+    APISECRET9,
+    CHECKPROP9,
     TRADERURL,
     MUTE1,
     MUTE2,
@@ -92,12 +96,13 @@ logging.basicConfig(
     SEP3,
     CP1,
     UPDATEPROP,
-) = range(55)
+) = range(59)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
 
 current_users = {}
+current_users_subaccount = {}
 current_stream = None
 dictLock = threading.Lock()
 stop_update = False
@@ -164,12 +169,20 @@ class getStreamData(threading.Thread):
             for pos in result:
                 pos = pos["data"]
                 if float(pos["size"]) != 0:
+                    try:
+                        mp = self.client.LinearKline.LinearKline_get(
+                            symbol=pos["symbol"],
+                            interval="1",
+                            **{"from": time.time() - 62},
+                        ).result()[0]["result"][0]["close"]
+                    except:
+                        mp = pos["entry_price"]
                     symbol.append(pos["symbol"])
                     tsize = pos["size"]
                     tsize = tsize if pos["side"] == "Buy" else -tsize
                     size.append(tsize)
                     EnPrice.append(pos["entry_price"])
-                    MarkPrice.append(pos["position_value"] / pos["size"])
+                    MarkPrice.append(mp)
                     PNL.append(pos["unrealised_pnl"])
                     margin.append(pos["leverage"])
                     listTradingSymbols.append(pos["symbol"])
@@ -419,6 +432,20 @@ def process_newest_position(diff, df, isCloseAll):
                     chat_id=chat_id, text="Open trade failed, retrying."
                 )
                 failOpened += 1
+    for chat_id in current_users_subaccount:
+        for i, client in enumerate(current_users_subaccount[chat_id]):
+            tosend = f"Opening trade for your subaccount #{i}."
+            updater.bot.sendMessage(chat_id, tosend)
+            failOpened = 0
+            while failOpened < 3:
+                try:
+                    client.open_trade(diff, isCloseAll, mute=True)
+                    failOpened = 10
+                except:
+                    updater.bot.sendMessage(
+                        chat_id=chat_id, text="Open trade failed, retrying."
+                    )
+                    failOpened += 1
 
 
 def automatic_reload():
@@ -468,9 +495,19 @@ Type "yes" (lowercase) if you agree. Otherwise type /cancel and exit.',
 
 def disclaimer_check(update: Update, context: CallbackContext):
     logger.info("%s has agreed to the disclaimer.", update.message.from_user.first_name)
+    context.user_data["is_sub"] = False
     update.message.reply_text(
         "Please choose the platform:\n1. AAX\n2. Bybit\n3.Binance\nPlease enter your choice (1,2,3)"
     )
+    return PLATFORM
+
+
+def add_sub_account(update: Update, context: CallbackContext):
+    logger.info("%s adding subaccounts.", update.message.from_user.first_name)
+    update.message.reply_text(
+        "Please choose the platform:\n1. AAX\n2. Bybit\n3.Binance\nPlease enter your choice (1,2,3)"
+    )
+    context.user_data["is_sub"] = True
     return PLATFORM
 
 
@@ -528,15 +565,29 @@ def check_ratio(update: Update, context: CallbackContext):
     update.message.reply_text(
         "By default, you will follow exactly every order made in Kevin's account, except the quantity will be multiplied by the proportion. You may adjust the settings including leverage, proportion, take_profit, stop_loss etc, but do that with EXTREME CAUTION. Use the Menu to see the available settings."
     )
-    current_users[update.message.chat_id] = userClient(
-        update.message.chat_id,
-        context.user_data["uname"],
-        1,
-        context.user_data["api_key"],
-        context.user_data["api_secret"],
-        ratio,
-        tplatform=context.user_data["platform"],
-    )
+    if context.user_data["is_sub"]:
+        if update.message.chat_id not in current_users_subaccount:
+            current_users_subaccount[update.message.chat_id] = []
+        client = userClient(
+            update.message.chat_id,
+            context.user_data["uname"],
+            1,
+            context.user_data["api_key"],
+            context.user_data["api_secret"],
+            ratio,
+            tplatform=context.user_data["platform"],
+        )
+        current_users_subaccount[update.message.chat_id].append(client)
+    else:
+        current_users[update.message.chat_id] = userClient(
+            update.message.chat_id,
+            context.user_data["uname"],
+            1,
+            context.user_data["api_key"],
+            context.user_data["api_secret"],
+            ratio,
+            tplatform=context.user_data["platform"],
+        )
     update.message.reply_text("You have successfully initialized! :)")
     return ConversationHandler.END
 
@@ -575,6 +626,7 @@ def end_everyone(update: Update, context: CallbackContext):
             chat_id=user, text="Your service has been force ended by admin."
         )
     current_users = {}
+    current_users_subaccount = {}
     logger.info("Everyone's service has ended.")
     return ConversationHandler.END
 
@@ -629,6 +681,24 @@ def save_to_file(update: Update, context: CallbackContext):
                 "platform": user.tplatform,
             }
         )
+    for userx in current_users_subaccount:
+        for user in current_users_subaccount[userx]:
+            save_items.append(
+                {
+                    "chat_id": user.chat_id,
+                    "uname": user.uname,
+                    "safety_ratio": user.safety_ratio,
+                    "api_key": user.api_key,
+                    "api_secret": user.api_secret,
+                    "tp": user.take_profit_percent,
+                    "sl": user.stop_loss_percent,
+                    "lmode": user.lmode,
+                    "positions": user.positions,
+                    "proportion": user.proportion,
+                    "leverage": user.leverage,
+                    "platform": user.tplatform,
+                }
+            )
     with open("userdata_calvin.pickle", "wb") as f:
         pickle.dump(save_items, f)
     logger.info("Saved user current state.")
@@ -1359,7 +1429,7 @@ class userClient:
     def get_symbols(self):
         return self.client.get_symbols()
 
-    def open_trade(self, df, isCloseAll):
+    def open_trade(self, df, isCloseAll, mute=False):
         return self.client.open_trade(
             df,
             self.uname,
@@ -1370,7 +1440,7 @@ class userClient:
             self.positions,
             self.take_profit_percent,
             self.stop_loss_percent,
-            False,
+            mute,
             isCloseAll,
         )
 
@@ -3178,25 +3248,40 @@ def restore_save_data():
     logger.info("Restored data")
     with open("userdata_calvin.pickle", "rb") as f:
         userdata = pickle.load(f)
-    for (
-        x
-    ) in (
-        userdata
-    ):  # (self,chat_id,uname,safety_ratio,api_key,api_secret,proportion,positions=None,Leverage=None,tp=-1,sl=-1,lmode=0):
-        current_users[x["chat_id"]] = userClient(
-            x["chat_id"],
-            x["uname"],
-            x["safety_ratio"],
-            x["api_key"],
-            x["api_secret"],
-            x["proportion"],
-            x["positions"],
-            x["leverage"],
-            x["tp"],
-            x["sl"],
-            x["lmode"],
-            x["platform"],
-        )
+    for x in userdata:
+        if x["chat_id"] not in current_users:
+            current_users[x["chat_id"]] = userClient(
+                x["chat_id"],
+                x["uname"],
+                x["safety_ratio"],
+                x["api_key"],
+                x["api_secret"],
+                x["proportion"],
+                x["positions"],
+                x["leverage"],
+                x["tp"],
+                x["sl"],
+                x["lmode"],
+                x["platform"],
+            )
+        else:
+            if x["chat_id"] not in current_users_subaccount:
+                current_users_subaccount[x["chat_id"]] = []
+            client = userClient(
+                x["chat_id"],
+                x["uname"],
+                x["safety_ratio"],
+                x["api_key"],
+                x["api_secret"],
+                x["proportion"],
+                x["positions"],
+                x["leverage"],
+                x["tp"],
+                x["sl"],
+                x["lmode"],
+                x["platform"],
+            )
+            current_users_subaccount[x["chat_id"]].append(client)
 
 
 def reload_announcement():
@@ -3226,6 +3311,7 @@ def error_callback(update, context):
         user = current_users[user]
         updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
     current_users = {}
+    current_users_subaccount = {}
     logger.info("Everyone's service has ended.")
     if not is_reloading:
         t1 = threading.Thread(target=reload_updater)
@@ -3416,6 +3502,18 @@ def reload_updater():
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
+    conv_handler25 = ConversationHandler(
+        entry_points=[CommandHandler("addsubaccount", add_sub_account)],
+        states={
+            PLATFORM: [
+                MessageHandler(Filters.regex("^(1|2|3)$"), check_platform)
+            ],  # DO COME BACK
+            APIKEY: [MessageHandler(Filters.text & ~Filters.command, check_api)],
+            APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
+            CHECKPROP: [MessageHandler(Filters.text & ~Filters.command, check_ratio)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
     dispatcher.add_handler(conv_handler6)
@@ -3435,6 +3533,7 @@ def reload_updater():
     dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(conv_handler23)
     dispatcher.add_handler(conv_handler24)
+    dispatcher.add_handler(conv_handler25)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
@@ -3626,6 +3725,18 @@ def main():
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
+    conv_handler25 = ConversationHandler(
+        entry_points=[CommandHandler("addsubaccount", add_sub_account)],
+        states={
+            PLATFORM: [
+                MessageHandler(Filters.regex("^(1|2|3)$"), check_platform)
+            ],  # DO COME BACK
+            APIKEY: [MessageHandler(Filters.text & ~Filters.command, check_api)],
+            APISECRET: [MessageHandler(Filters.text & ~Filters.command, check_secret)],
+            CHECKPROP: [MessageHandler(Filters.text & ~Filters.command, check_ratio)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
     global current_stream
     dispatcher.add_handler(conv_handler)
     dispatcher.add_handler(conv_handler2)
@@ -3646,6 +3757,7 @@ def main():
     dispatcher.add_handler(conv_handler22)
     dispatcher.add_handler(conv_handler23)
     dispatcher.add_handler(conv_handler24)
+    dispatcher.add_handler(conv_handler25)
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))

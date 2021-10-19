@@ -3973,12 +3973,20 @@ class BybitClient:
         for pos in result:
             pos = pos["data"]
             if float(pos["size"]) != 0:
+                try:
+                    mp = self.client.LinearKline.LinearKline_get(
+                        symbol=pos["symbol"],
+                        interval="1",
+                        **{"from": time.time() - 62},
+                    ).result()[0]["result"][0]["close"]
+                except:
+                    mp = pos["entry_price"]
                 symbol.append(pos["symbol"])
                 tsize = pos["size"]
                 tsize = tsize if pos["side"] == "Buy" else -tsize
                 size.append(tsize)
                 EnPrice.append(pos["entry_price"])
-                MarkPrice.append(pos["position_value"] / pos["size"])
+                MarkPrice.append(mp)
                 PNL.append(pos["unrealised_pnl"])
                 margin.append(pos["leverage"])
         newPosition = pd.DataFrame(
