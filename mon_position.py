@@ -4295,6 +4295,10 @@ class BybitClient:
             isOpen = False
             types = tradeinfo[0].upper()
             balance, collateral, coin = 0, 0, ""
+            if tradeinfo[1] == "1000SHIBUSDT":
+                tradeinfo[1] = "SHIB1000USDT"
+            if tradeinfo[1][-4:] == "BUSD":
+                tradeinfo[1] = tradeinfo[1][:-4] + "USDT"
             if not tradeinfo[1] in proportion:
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
