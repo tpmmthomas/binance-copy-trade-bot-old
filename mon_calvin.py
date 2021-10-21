@@ -1345,7 +1345,7 @@ def close_position(update: Update, context: CallbackContext):
         return ConversationHandler.END
     if update.message.chat_id in current_users_subaccount:
         update.message.reply_text(
-            "Please choose the account (-1: main account, 0,1,2,... for sub accounts)"
+            "Please choose the account (0: main account, 1,2,... for sub accounts)"
         )
         return ABD
     user = current_users[update.message.chat_id]
@@ -1357,14 +1357,14 @@ def close_position(update: Update, context: CallbackContext):
             listsymbols, one_time_keyboard=True, input_field_placeholder="Which Symbol?"
         ),
     )
-    context.user_data["account"] = -1
+    context.user_data["account"] = 0
     return CP1
 
 
 def checkaccount(update: Update, context: CallbackContext):
     try:
         account = int(update.message.text)
-        assert account >= -1 and account < len(
+        assert account >= 0 and account <= len(
             current_users_subaccount[update.message.chat_id]
         )
     except:
@@ -1398,14 +1398,17 @@ def conf_symbol(update: Update, context: CallbackContext):
             ),
         )
         return CP1
-    if context.user_data["account"] == -1:
+    if context.user_data["account"] == 0:
         user.client.close_position(update.message.text)
     else:
-        account = context.user_data["account"]
-        current_users_subaccount[update.message.chat_id][account].close_position(
-            update.message.text
-        )
-
+        account = context.user_data["account"] - 1
+        logger.info(f"account: {account}")
+        try:
+            current_users_subaccount[update.message.chat_id][account].close_position(
+                update.message.text
+            )
+        except Exception as e:
+            logger.error(e)
     return ConversationHandler.END
 
 
@@ -3363,6 +3366,7 @@ def error_callback(update, context):
     global reloading
     reloading = True
     global current_users
+    global current_users_subaccount
     for user in current_users:
         user = current_users[user]
         updater.bot.sendMessage(chat_id=user.chat_id, text="Automatic reloading...")
