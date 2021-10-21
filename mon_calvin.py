@@ -439,7 +439,7 @@ def process_newest_position(diff, df, isCloseAll):
             failOpened = 0
             while failOpened < 3:
                 try:
-                    client.open_trade(diff, isCloseAll, mute=True)
+                    client.open_trade(diff, isCloseAll, mute=False) #temp
                     failOpened = 10
                 except:
                     updater.bot.sendMessage(
@@ -1367,6 +1367,9 @@ def conf_symbol(update: Update, context: CallbackContext):
         )
         return CP1
     user.client.close_position(update.message.text)
+    if update.message.chat_id in current_users_subaccount:
+        for clients in current_users_subaccount[update.message.chat_id]:
+            clients.close_position(update.message.text)
     return ConversationHandler.END
 
 
