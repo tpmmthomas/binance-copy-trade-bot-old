@@ -1135,7 +1135,11 @@ def retrieveUserName(url):
     except:
         return None
     i = 0
-    while not success or name == "No Battle Record Found":
+    while (
+        not success
+        or name == "No Battle Record Found"
+        or name.find("Latest trade:") != -1
+    ):
         if i >= 10:
             master_lock.release()
             return None
@@ -1145,7 +1149,7 @@ def retrieveUserName(url):
         except:
             master_lock.release()
             return None
-        time.sleep(2)
+        time.sleep(4)
         soup = BeautifulSoup(myDriver.page_source, features="html.parser")
         x = soup.get_text()
         x = x.split("\n")[4]
