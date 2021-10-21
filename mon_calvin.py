@@ -2204,12 +2204,12 @@ class BybitClient:
         try:
             result = self.client.LinearPositions.LinearPositions_myPosition(
                 symbol=symbol
-            ).result()[0]
+            ).result()[0]["result"]
             assert result is not None
         except:
             updater.bot.sendMessage(self.chat_id, "API invalid.")
             return
-        for pos in result["result"]:
+        for pos in result:
             if float(pos["free_qty"]) > 0:
                 side = "Buy" if pos["side"] == "Sell" else "Buy"
                 self.client.LinearOrder.LinearOrder_new(
