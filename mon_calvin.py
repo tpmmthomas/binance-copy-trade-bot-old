@@ -2200,10 +2200,12 @@ class BybitClient:
         return symbolList
 
     def close_position(self, symbol):
-        result = self.client.LinearPositions.LinearPositions_myPosition(
-            symbol=symbol
-        ).result()[0]
-        if result is None:
+        try:
+            result = self.client.LinearPositions.LinearPositions_myPosition(
+                symbol=symbol
+            ).result()[0]
+            assert result is not None:
+        except:
             updater.bot.sendMessage(self.chat_id, "API invalid.")
             return
         for pos in result["result"]:
