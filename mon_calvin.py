@@ -1404,9 +1404,9 @@ def conf_symbol(update: Update, context: CallbackContext):
         account = context.user_data["account"] - 1
         logger.info(f"account: {account}")
         try:
-            current_users_subaccount[update.message.chat_id][account].client.close_position(
-                update.message.text
-            )
+            current_users_subaccount[update.message.chat_id][
+                account
+            ].client.close_position(update.message.text)
         except Exception as e:
             logger.error(e)
     return ConversationHandler.END
@@ -2203,6 +2203,8 @@ class BybitClient:
         result = self.client.LinearPositions.LinearPositions_myPosition(
             symbol=symbol
         ).result()[0]
+        if result is None:
+            updater.bot.sendMessage(self.chat_id, "API invalid.")
         for pos in result["result"]:
             if float(pos["free_qty"]) > 0:
                 side = "Buy" if pos["side"] == "Sell" else "Buy"
