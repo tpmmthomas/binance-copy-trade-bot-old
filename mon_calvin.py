@@ -38,6 +38,7 @@ logging.basicConfig(
 )
 (
     AUTH,
+    ABD,
     SEP1,
     SEP2,
     PLATFORM,
@@ -96,7 +97,7 @@ logging.basicConfig(
     SEP3,
     CP1,
     UPDATEPROP,
-) = range(59)
+) = range(60)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
@@ -439,7 +440,7 @@ def process_newest_position(diff, df, isCloseAll):
             failOpened = 0
             while failOpened < 3:
                 try:
-                    client.open_trade(diff, isCloseAll, mute=False) #temp
+                    client.open_trade(diff, isCloseAll, mute=False)  # temp
                     failOpened = 10
                 except:
                     updater.bot.sendMessage(
@@ -1317,13 +1318,15 @@ def change_bnall(update: Update, context: CallbackContext):
     )
     return ConversationHandler.END
 
+
 def delete_sub_account(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
     if update.message.chat_id in current_users_subaccount:
         del current_users_subaccount[update.message.chat_id]
     update.message.reply_text("All subaccounts have been deleted.")
-    return 
+    return
+
 
 def check_balance(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
@@ -1340,6 +1343,11 @@ def close_position(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
         return ConversationHandler.END
+    if update.message.chat_id in current_users_subaccount:
+        update.message.reply_text(
+            "Please choose the account (-1: main account, 0,1,2,... for sub accounts)"
+        )
+        return ABD
     user = current_users[update.message.chat_id]
     listsymbols = user.client.get_symbols()
     listsymbols = [[x] for x in listsymbols]
@@ -1349,6 +1357,30 @@ def close_position(update: Update, context: CallbackContext):
             listsymbols, one_time_keyboard=True, input_field_placeholder="Which Symbol?"
         ),
     )
+    context.user_data["account"] = -1
+    return CP1
+
+
+def checkaccount(update: Update, context: CallbackContext):
+    try:
+        account = int(update.message.text)
+        assert account >= -1 and account < len(
+            current_users_subaccount[update.message.chat_id]
+        )
+    except:
+        update.message.reply_text("Sorry your input is invalid, please try again.")
+        return ABD
+
+    user = current_users[update.message.chat_id]
+    listsymbols = user.client.get_symbols()
+    listsymbols = [[x] for x in listsymbols]
+    update.message.reply_text(
+        "Please choose the symbol to close.",
+        reply_markup=ReplyKeyboardMarkup(
+            listsymbols, one_time_keyboard=True, input_field_placeholder="Which Symbol?"
+        ),
+    )
+    context.user_data["account"] = account
     return CP1
 
 
@@ -1366,10 +1398,14 @@ def conf_symbol(update: Update, context: CallbackContext):
             ),
         )
         return CP1
-    user.client.close_position(update.message.text)
-    if update.message.chat_id in current_users_subaccount:
-        for clients in current_users_subaccount[update.message.chat_id]:
-            clients.close_position(update.message.text)
+    if context.user_data["account"] == -1:
+        user.client.close_position(update.message.text)
+    else:
+        account = context.user_data["account"]
+        current_users_subaccount[update.message.chat_id][account].close_position(
+            update.message.text
+        )
+
     return ConversationHandler.END
 
 
@@ -3510,7 +3546,10 @@ def reload_updater():
     )
     conv_handler23 = ConversationHandler(
         entry_points=[CommandHandler("closeposition", close_position)],
-        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
+        states={
+            CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],
+            ABD: [MessageHandler(Filters.text & ~Filters.command, checkaccount)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler24 = ConversationHandler(
@@ -3734,7 +3773,10 @@ def main():
     )
     conv_handler23 = ConversationHandler(
         entry_points=[CommandHandler("closeposition", close_position)],
-        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
+        states={
+            CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],
+            ABD: [MessageHandler(Filters.text & ~Filters.command, checkaccount)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler24 = ConversationHandler(
