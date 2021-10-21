@@ -2205,6 +2205,7 @@ class BybitClient:
         ).result()[0]
         if result is None:
             updater.bot.sendMessage(self.chat_id, "API invalid.")
+            return
         for pos in result["result"]:
             if float(pos["free_qty"]) > 0:
                 side = "Buy" if pos["side"] == "Sell" else "Buy"
