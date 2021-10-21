@@ -1404,7 +1404,7 @@ def conf_symbol(update: Update, context: CallbackContext):
         account = context.user_data["account"] - 1
         logger.info(f"account: {account}")
         try:
-            current_users_subaccount[update.message.chat_id][account].close_position(
+            current_users_subaccount[update.message.chat_id][account].client.close_position(
                 update.message.text
             )
         except Exception as e:
