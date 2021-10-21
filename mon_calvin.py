@@ -2204,7 +2204,7 @@ class BybitClient:
             result = self.client.LinearPositions.LinearPositions_myPosition(
                 symbol=symbol
             ).result()[0]
-            assert result is not None:
+            assert result is not None
         except:
             updater.bot.sendMessage(self.chat_id, "API invalid.")
             return
