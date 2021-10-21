@@ -2200,6 +2200,7 @@ class BybitClient:
         return symbolList
 
     def close_position(self, symbol):
+        logger.info("Hi")
         try:
             result = self.client.LinearPositions.LinearPositions_myPosition(
                 symbol=symbol
