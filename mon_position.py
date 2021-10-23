@@ -194,7 +194,7 @@ def save_trading_pnl():
             user = CurrentUsers[user]
             try:
                 bal = user.bclient.get_balance(False)
-                if not bal is None:
+                if not bal is None and bal != 0:
                     with open(f"{user.uname}_pnlrecord.csv", "a") as f:
                         f.write(f"{str(bal)}\n")
             except:
