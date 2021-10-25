@@ -4557,15 +4557,22 @@ class BybitClient:
         return
 
     def get_balance(self, querymode=True):
-        try:
-            result = self.client.Wallet.Wallet_getBalance(coin="USDT").result()
-            result = result[0]["result"]["USDT"]
-            if querymode:
-                tosend = f"Your USDT account balance:\nBalance: {result['equity']}\nAvailable: {result['available_balance']}\nRealised PNL: {result['realised_pnl']}\nUnrealized PNL: {result['unrealised_pnl']}"
-                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+        numtries = 0
+        while numtries < 5:
+            try:
+                result = self.client.Wallet.Wallet_getBalance(coin="USDT").result()
+                result = result[0]["result"]["USDT"]
+                if querymode:
+                    tosend = f"Your USDT account balance:\nBalance: {result['equity']}\nAvailable: {result['available_balance']}\nRealised PNL: {result['realised_pnl']}\nUnrealized PNL: {result['unrealised_pnl']}"
+                    updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                else:
+                    return float(result["equity"])
+            except:
+                numtries += 1
+                time.sleep(1)
             else:
-                return float(result["equity"])
-        except:
+                break
+        if numtries == 5:
             updater.bot.sendMessage(
                 chat_id=self.chat_id, text="Unable to retrieve balance."
             )
