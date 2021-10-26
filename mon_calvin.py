@@ -856,16 +856,19 @@ def update_proportion(update: Update, context: CallbackContext):
     update.message.reply_text(
         "Please enter the amount you want to invest (minumum 100 USDT)."
     )
-    context.user_data['account'] = 0
+    context.user_data["account"] = 0
     return UPDATEPROP
 
-def chosenaccount(update:Update,context:CallbackContext):
+
+def chosenaccount(update: Update, context: CallbackContext):
     try:
         account = int(update.message.text)
-        assert account>=0 and account <= len(current_users_subaccount[update.message.chat_id])
+        assert account >= 0 and account <= len(
+            current_users_subaccount[update.message.chat_id]
+        )
     except:
         update.message.reply_text("The account is invalid, please enter again.")
-    context.user_data['account'] = account
+    context.user_data["account"] = account
     update.message.reply_text(
         "Please enter the amount you want to invest (minumum 100 USDT)."
     )
@@ -882,12 +885,14 @@ def updateProportionReal(update: Update, context: CallbackContext):
         return UPDATEPROP
     newprop = prop / current_stream.get_balance()
     newprop = round_up(newprop, 6)
-    acc = context.user_data['account']
-    update.message.reply_text(f"Your newest proportion for account #{acc} is {newprop}.")
+    acc = context.user_data["account"]
+    update.message.reply_text(
+        f"Your newest proportion for account #{acc} is {newprop}."
+    )
     if acc == 0:
         user.change_all_proportion(newprop)
     else:
-        user = current_users_subaccount[update.message.chat_id][acc-1]
+        user = current_users_subaccount[update.message.chat_id][acc - 1]
         user.change_all_proportion(newprop)
     return ConversationHandler.END
 
@@ -2255,13 +2260,13 @@ class BybitClient:
             updater.bot.sendMessage(self.chat_id, "API invalid.")
             return
         for pos in result:
-            if float(pos["free_qty"]) > 0:
+            if float(pos["size"]) > 0:
                 side = "Buy" if pos["side"] == "Sell" else "Buy"
                 self.client.LinearOrder.LinearOrder_new(
                     side=side,
                     symbol=symbol,
                     order_type="Market",
-                    qty=float(pos["free_qty"]),
+                    qty=float(pos["size"]),
                     time_in_force="GoodTillCancel",
                     reduce_only=True,
                     close_on_trigger=True,
