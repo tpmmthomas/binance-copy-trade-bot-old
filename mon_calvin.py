@@ -440,7 +440,9 @@ def process_newest_position(diff, df, isCloseAll):
             failOpened = 0
             while failOpened < 3:
                 try:
-                    client.open_trade(diff, isCloseAll, mute=False)  # temp
+                    client.open_trade(
+                        diff, isCloseAll, mute=False, subacc=i + 1
+                    )  # temp
                     failOpened = 10
                 except:
                     updater.bot.sendMessage(
@@ -1498,7 +1500,7 @@ class userClient:
     def get_symbols(self):
         return self.client.get_symbols()
 
-    def open_trade(self, df, isCloseAll, mute=False):
+    def open_trade(self, df, isCloseAll, mute=False, subacc=0):
         return self.client.open_trade(
             df,
             self.uname,
@@ -1511,6 +1513,7 @@ class userClient:
             self.stop_loss_percent,
             mute,
             isCloseAll,
+            subacc=subacc,
         )
 
     def reload(self):
@@ -1911,6 +1914,7 @@ class AAXClient:
         stopLoss,
         mute,
         isCloseAll,
+        subacc=0,
     ):
         try:
             self.reload()
@@ -2325,11 +2329,16 @@ class BybitClient:
         takeProfit,
         stopLoss,
         Leverage,
+        subacc,
     ):  # ONLY to be run as thread
         numTries = 0
         time.sleep(1)
         result = ""
         executed_qty = 0
+        if subacc == 0:
+            user = current_users[self.chat_id]
+        else:
+            user = current_users_subaccount[self.chat_id][subacc - 1]
         while True:
             try:
                 result = self.client.LinearOrder.LinearOrder_query(
@@ -2347,13 +2356,9 @@ class BybitClient:
                     # ADD TO POSITION
                     if isOpen:
                         if positionKey in current_users[self.chat_id].positions:
-                            current_users[self.chat_id].positions[positionKey] += float(
-                                result["cum_exec_qty"]
-                            )
+                            user.positions[positionKey] += float(result["cum_exec_qty"])
                         else:
-                            current_users[self.chat_id].positions[positionKey] = float(
-                                result["cum_exec_qty"]
-                            )
+                            user.positions[positionKey] = float(result["cum_exec_qty"])
                         try:
                             self.tpsl_trade(
                                 symbol,
@@ -2368,14 +2373,12 @@ class BybitClient:
                         except:
                             pass
                     else:
-                        if positionKey in current_users[self.chat_id].positions:
-                            current_users[self.chat_id].positions[positionKey] -= float(
-                                result["cum_exec_qty"]
-                            )
+                        if positionKey in user.positions:
+                            user.positions[positionKey] -= float(result["cum_exec_qty"])
                         else:
-                            current_users[self.chat_id].positions[positionKey] = 0
-                        if current_users[self.chat_id].positions[positionKey] < 0:
-                            current_users[self.chat_id].positions[positionKey] = 0
+                            user.positions[positionKey] = 0
+                        if user.positions[positionKey] < 0:
+                            user.positions[positionKey] = 0
                         # check positions thenn close all
                         res = self.client.LinearPositions.LinearPositions_myPosition(
                             symbol=symbol
@@ -2384,10 +2387,10 @@ class BybitClient:
                         for pos in res:
                             logger.info(str(pos))
                             if pos["side"] == checkside and float(pos["size"]) == 0:
-                                current_users[self.chat_id].positions[positionKey] = 0
+                                user.positions[positionKey] = 0
                                 break
                     logger.info(
-                        f"DEBUG {self.uname} {positionKey}: {current_users[self.chat_id].positions[positionKey]}"
+                        f"DEBUG {self.uname} {positionKey}: {user.positions[positionKey]}"
                     )
                     return
                 elif result["order_status"] in [
@@ -2403,21 +2406,15 @@ class BybitClient:
                 elif result["order_status"] == "PartiallyFilled":
                     updatedQty = float(result["cum_exec_qty"]) - executed_qty
                     if isOpen:
-                        if positionKey in current_users[self.chat_id].positions:
-                            current_users[self.chat_id].positions[
-                                positionKey
-                            ] += updatedQty
+                        if positionKey in user.positions:
+                            user.positions[positionKey] += updatedQty
                         else:
-                            current_users[self.chat_id].positions[
-                                positionKey
-                            ] = updatedQty
+                            user.positions[positionKey] = updatedQty
                     else:
-                        if positionKey in current_users[self.chat_id].positions:
-                            current_users[self.chat_id].positions[positionKey] -= float(
-                                result["cum_exec_qty"]
-                            )
+                        if positionKey in user.positions:
+                            user.positions[positionKey] -= float(result["cum_exec_qty"])
                         else:
-                            current_users[self.chat_id].positions[positionKey] = 0
+                            user.positions[positionKey] = 0
                     executed_qty = float(result["cum_exec_qty"])
             except:
                 logger.error("eeerrroooorrr")
@@ -2473,6 +2470,7 @@ class BybitClient:
         stopLoss,
         mute,
         isCloseAll,
+        subacc=0,
     ):
 
         try:
@@ -2633,6 +2631,7 @@ class BybitClient:
                             takeProfit[tradeinfo[1]],
                             stopLoss[tradeinfo[1]],
                             leverage[tradeinfo[1]],
+                            subacc,
                         ),
                     )
                     t1.start()
@@ -2691,6 +2690,7 @@ class BybitClient:
                             takeProfit[tradeinfo[1]],
                             stopLoss[tradeinfo[1]],
                             leverage[tradeinfo[1]],
+                            subacc,
                         ),
                     )
                     t1.start()
@@ -3186,6 +3186,7 @@ class BinanceClient:
         stopLoss,
         mute,
         isCloseAll,
+        subacc=0,
     ):
         try:
             self.reload()
