@@ -1338,6 +1338,16 @@ def check_balance(update: Update, context: CallbackContext):
             clientx.client.get_balance()
     return
 
+def check_position(update: Update, context: CallbackContext):
+    if not update.message.chat_id in current_users:
+        update.message.reply_text("Please initalize with /start first.")
+    current_users[update.message.chat_id].client.get_positions()
+    if update.message.chat_id in current_users_subaccount:
+        for i, clientx in enumerate(current_users_subaccount[update.message.chat_id]):
+            update.message.reply_text(f"Balance for sub_account #{i+1}:")
+            clientx.client.get_positions()
+    return
+
 
 def close_position(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
@@ -1768,6 +1778,12 @@ class AAXClient:
             updater.bot.sendMessage(
                 chat_id=self.chat_id, text=f"Error: f{response['message']}"
             )
+        return
+
+    def get_positions(self):
+        updater.bot.sendMessage(
+            chat_id=self.chat_id, text="This feature has not been implemented yet!"
+        )
         return
 
     def query_trade(
@@ -2680,6 +2696,66 @@ class BybitClient:
                 except:
                     logger.error("have error!!")
 
+    def get_positions(self):
+        try:
+            result = self.client.LinearPositions.LinearPositions_myPosition().result()[
+                0
+            ]["result"]
+        except:
+            logger.error("Other errors")
+        symbol = []
+        size = []
+        EnPrice = []
+        MarkPrice = []
+        PNL = []
+        margin = []
+        for pos in result:
+            pos = pos["data"]
+            if float(pos["size"]) != 0:
+                try:
+                    mp = self.client.LinearKline.LinearKline_get(
+                        symbol=pos["symbol"],
+                        interval="1",
+                        **{"from": time.time() - 62},
+                    ).result()[0]["result"][0]["close"]
+                except:
+                    mp = pos["entry_price"]
+                symbol.append(pos["symbol"])
+                tsize = pos["size"]
+                tsize = tsize if pos["side"] == "Buy" else -tsize
+                size.append(tsize)
+                EnPrice.append(pos["entry_price"])
+                MarkPrice.append(mp)
+                PNL.append(pos["unrealised_pnl"])
+                margin.append(pos["leverage"])
+        newPosition = pd.DataFrame(
+            {
+                "symbol": symbol,
+                "size": size,
+                "Entry Price": EnPrice,
+                "Mark Price": MarkPrice,
+                "PNL": PNL,
+                "leverage": margin,
+            }
+        )
+        numrows = newPosition.shape[0]
+        if numrows <= 10:
+            tosend = f"Your current Position: " + "\n" + newPosition.to_string() + "\n"
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+        else:
+            firstdf = newPosition.iloc[0:10]
+            tosend = (
+                f"Your current Position: " + "\n" + firstdf.to_string() + "\n(cont...)"
+            )
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+            for i in range(numrows // 10):
+                seconddf = newPosition.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
+                if not seconddf.empty:
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id, text=seconddf.to_string()
+                    )
+        return
+
     def reload(self):
         if not self.isReloaded:
             secondticksize = {}
@@ -2758,6 +2834,61 @@ class BinanceClient:
                 )
         except BinanceAPIException as e:
             logger.error(e)
+
+    def get_positions(self):
+        try:
+            result = self.client.futures_position_information()
+        except BinanceAPIException as e:
+            logger.error("Cannot retrieve latest position.")
+            logger.error(str(e))
+            return
+        except:
+            logger.error("Other errors")
+            return
+        symbol = []
+        size = []
+        EnPrice = []
+        MarkPrice = []
+        PNL = []
+        margin = []
+        listTradingSymbols = []
+        for pos in result:
+            if float(pos["positionAmt"]) != 0:
+                symbol.append(pos["symbol"])
+                tsize = pos["positionAmt"]
+                size.append(tsize)
+                EnPrice.append(pos["entryPrice"])
+                MarkPrice.append(pos["markPrice"])
+                PNL.append(pos["unRealizedProfit"])
+                margin.append(pos["leverage"])
+                listTradingSymbols.append(pos["symbol"])
+        newPosition = pd.DataFrame(
+            {
+                "symbol": symbol,
+                "size": size,
+                "Entry Price": EnPrice,
+                "Mark Price": MarkPrice,
+                "PNL": PNL,
+                "leverage": margin,
+            }
+        )
+        numrows = newPosition.shape[0]
+        if numrows <= 10:
+            tosend = f"Your current Position: " + "\n" + newPosition.to_string() + "\n"
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+        else:
+            firstdf = newPosition.iloc[0:10]
+            tosend = (
+                f"Your current Position: " + "\n" + firstdf.to_string() + "\n(cont...)"
+            )
+            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+            for i in range(numrows // 10):
+                seconddf = newPosition.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
+                if not seconddf.empty:
+                    updater.bot.sendMessage(
+                        chat_id=self.chat_id, text=seconddf.to_string()
+                    )
+        return
 
     def get_symbols(self):
         symbolList = []
@@ -3606,6 +3737,7 @@ def reload_updater():
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
     dispatcher.add_handler(CommandHandler("deletesubaccount", delete_sub_account))
     dispatcher.add_error_handler(error_callback)
@@ -3834,6 +3966,7 @@ def main():
     dispatcher.add_handler(CommandHandler("help", help_command))
     dispatcher.add_handler(CommandHandler("view", view_position))
     dispatcher.add_handler(CommandHandler("checkbal", check_balance))
+    dispatcher.add_handler(CommandHandler("checkpos", check_position))
     dispatcher.add_handler(CommandHandler("viewpnlstat", viewpnlstat))
     dispatcher.add_handler(CommandHandler("deletesubaccount", delete_sub_account))
     dispatcher.add_error_handler(error_callback)
