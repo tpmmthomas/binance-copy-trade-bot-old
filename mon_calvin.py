@@ -39,6 +39,7 @@ logging.basicConfig(
 (
     AUTH,
     ABD,
+    ABD2,
     SEP1,
     SEP2,
     PLATFORM,
@@ -97,7 +98,7 @@ logging.basicConfig(
     SEP3,
     CP1,
     UPDATEPROP,
-) = range(60)
+) = range(61)
 
 logger = logging.getLogger(__name__)
 updater = Updater(cnt.bot_token2)
@@ -847,6 +848,24 @@ def update_proportion(update: Update, context: CallbackContext):
         return ConversationHandler.END
     user = current_users[update.message.chat_id]
     logger.info(f"User {user.uname} adjusting proportion.")
+    if update.message.chat_id in current_users_subaccount:
+        update.message.reply_text(
+            "Please choose the account (0: main account, 1,2,... for sub accounts)"
+        )
+        return ABD2
+    update.message.reply_text(
+        "Please enter the amount you want to invest (minumum 100 USDT)."
+    )
+    context.user_data['account'] = 0
+    return UPDATEPROP
+
+def chosenaccount(update:Update,context:CallbackContext):
+    try:
+        account = int(update.message.text)
+        assert account>=0 and account <= len(current_users_subaccount[update.message.chat_id])
+    except:
+        update.message.reply_text("The account is invalid, please enter again.")
+    context.user_data['account'] = account
     update.message.reply_text(
         "Please enter the amount you want to invest (minumum 100 USDT)."
     )
@@ -863,8 +882,13 @@ def updateProportionReal(update: Update, context: CallbackContext):
         return UPDATEPROP
     newprop = prop / current_stream.get_balance()
     newprop = round_up(newprop, 6)
-    update.message.reply_text(f"Your newest proportion is {newprop}.")
-    user.change_all_proportion(newprop)
+    acc = context.user_data['account']
+    update.message.reply_text(f"Your newest proportion for account #{acc} is {newprop}.")
+    if acc == 0:
+        user.change_all_proportion(newprop)
+    else:
+        user = current_users_subaccount[update.message.chat_id][acc-1]
+        user.change_all_proportion(newprop)
     return ConversationHandler.END
 
 
@@ -3708,6 +3732,7 @@ def reload_updater():
     conv_handler24 = ConversationHandler(
         entry_points=[CommandHandler("updateproportion", update_proportion)],
         states={
+            ABD2: [MessageHandler(Filters.text & ~Filters.command, chosenaccount)],
             UPDATEPROP: [
                 MessageHandler(Filters.text & ~Filters.command, updateProportionReal)
             ],
@@ -3936,6 +3961,7 @@ def main():
     conv_handler24 = ConversationHandler(
         entry_points=[CommandHandler("updateproportion", update_proportion)],
         states={
+            ABD2: [MessageHandler(Filters.text & ~Filters.command, chosenaccount)],
             UPDATEPROP: [
                 MessageHandler(Filters.text & ~Filters.command, updateProportionReal)
             ],
