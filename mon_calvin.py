@@ -1338,6 +1338,7 @@ def check_balance(update: Update, context: CallbackContext):
             clientx.client.get_balance()
     return
 
+
 def check_position(update: Update, context: CallbackContext):
     if not update.message.chat_id in current_users:
         update.message.reply_text("Please initalize with /start first.")
@@ -2703,57 +2704,67 @@ class BybitClient:
             ]["result"]
         except:
             logger.error("Other errors")
-        symbol = []
-        size = []
-        EnPrice = []
-        MarkPrice = []
-        PNL = []
-        margin = []
-        for pos in result:
-            pos = pos["data"]
-            if float(pos["size"]) != 0:
-                try:
-                    mp = self.client.LinearKline.LinearKline_get(
-                        symbol=pos["symbol"],
-                        interval="1",
-                        **{"from": time.time() - 62},
-                    ).result()[0]["result"][0]["close"]
-                except:
-                    mp = pos["entry_price"]
-                symbol.append(pos["symbol"])
-                tsize = pos["size"]
-                tsize = tsize if pos["side"] == "Buy" else -tsize
-                size.append(tsize)
-                EnPrice.append(pos["entry_price"])
-                MarkPrice.append(mp)
-                PNL.append(pos["unrealised_pnl"])
-                margin.append(pos["leverage"])
-        newPosition = pd.DataFrame(
-            {
-                "symbol": symbol,
-                "size": size,
-                "Entry Price": EnPrice,
-                "Mark Price": MarkPrice,
-                "PNL": PNL,
-                "leverage": margin,
-            }
-        )
-        numrows = newPosition.shape[0]
-        if numrows <= 10:
-            tosend = f"Your current Position: " + "\n" + newPosition.to_string() + "\n"
-            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-        else:
-            firstdf = newPosition.iloc[0:10]
-            tosend = (
-                f"Your current Position: " + "\n" + firstdf.to_string() + "\n(cont...)"
+        try:
+            symbol = []
+            size = []
+            EnPrice = []
+            MarkPrice = []
+            PNL = []
+            margin = []
+            for pos in result:
+                pos = pos["data"]
+                if float(pos["size"]) != 0:
+                    try:
+                        mp = self.client.LinearKline.LinearKline_get(
+                            symbol=pos["symbol"],
+                            interval="1",
+                            **{"from": time.time() - 62},
+                        ).result()[0]["result"][0]["close"]
+                    except:
+                        mp = pos["entry_price"]
+                    symbol.append(pos["symbol"])
+                    tsize = pos["size"]
+                    tsize = tsize if pos["side"] == "Buy" else -tsize
+                    size.append(tsize)
+                    EnPrice.append(pos["entry_price"])
+                    MarkPrice.append(mp)
+                    PNL.append(pos["unrealised_pnl"])
+                    margin.append(pos["leverage"])
+            newPosition = pd.DataFrame(
+                {
+                    "symbol": symbol,
+                    "size": size,
+                    "Entry Price": EnPrice,
+                    "Mark Price": MarkPrice,
+                    "PNL": PNL,
+                    "leverage": margin,
+                }
             )
-            updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
-            for i in range(numrows // 10):
-                seconddf = newPosition.iloc[(i + 1) * 10 : min(numrows, (i + 2) * 10)]
-                if not seconddf.empty:
-                    updater.bot.sendMessage(
-                        chat_id=self.chat_id, text=seconddf.to_string()
-                    )
+            numrows = newPosition.shape[0]
+            if numrows <= 10:
+                tosend = (
+                    f"Your current Position: " + "\n" + newPosition.to_string() + "\n"
+                )
+                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+            else:
+                firstdf = newPosition.iloc[0:10]
+                tosend = (
+                    f"Your current Position: "
+                    + "\n"
+                    + firstdf.to_string()
+                    + "\n(cont...)"
+                )
+                updater.bot.sendMessage(chat_id=self.chat_id, text=tosend)
+                for i in range(numrows // 10):
+                    seconddf = newPosition.iloc[
+                        (i + 1) * 10 : min(numrows, (i + 2) * 10)
+                    ]
+                    if not seconddf.empty:
+                        updater.bot.sendMessage(
+                            chat_id=self.chat_id, text=seconddf.to_string()
+                        )
+        except:
+            updater.bot.sendMessage(self.chat_id, "Unable to get positions.")
         return
 
     def reload(self):
