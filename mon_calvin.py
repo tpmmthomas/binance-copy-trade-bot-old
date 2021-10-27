@@ -1037,6 +1037,8 @@ def end_all(update: Update, context: CallbackContext):
 
 def realEndAll(update: Update, context: CallbackContext):
     del current_users[update.message.chat_id]
+    if update.message.chat_id in current_users_subaccount:
+        del current_users_subaccount[update.message.chat_id]
     update.message.reply_text(
         "Sorry to see you go. You can press /start to restart the service."
     )
