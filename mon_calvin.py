@@ -2385,7 +2385,7 @@ class BybitClient:
                     )
                     # ADD TO POSITION
                     if isOpen:
-                        if positionKey in current_users[self.chat_id].positions:
+                        if positionKey in user.positions:
                             user.positions[positionKey] += float(result["cum_exec_qty"])
                         else:
                             user.positions[positionKey] = float(result["cum_exec_qty"])
@@ -2446,8 +2446,9 @@ class BybitClient:
                         else:
                             user.positions[positionKey] = 0
                     executed_qty = float(result["cum_exec_qty"])
-            except:
+            except Exception as e:
                 logger.error("eeerrroooorrr")
+                logger.error(str(e))
                 pass
             if numTries >= 59:
                 break
