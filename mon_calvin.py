@@ -135,6 +135,7 @@ class getStreamData(threading.Thread):
         self.lastPositions = None
         self.pauseload = threading.Event()
         self.isnopos = 0
+        self.isdiff = 0
 
     def get_balance(self):
         try:
@@ -147,7 +148,7 @@ class getStreamData(threading.Thread):
 
     def run(self):
         while True:
-            time.sleep(4)
+            time.sleep(2.5)
             if self.pauseload.is_set():
                 continue
             try:
@@ -207,10 +208,14 @@ class getStreamData(threading.Thread):
                 self.isnopos += 1
                 continue
             isDiff, diff, isCloseAll = self.compare(self.lastPositions, newPosition)
+            if isDiff and self.isdiff == 0:
+                self.isdiff += 1
+                continue
             if isDiff and not diff.empty:
                 # logger.info("Yes")
                 process_newest_position(diff, newPosition, isCloseAll)
             self.isnopos = 0
+            self.isdiff = 0
             self.lastPositions = newPosition
 
     def pause(self):
