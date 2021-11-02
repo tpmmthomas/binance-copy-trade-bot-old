@@ -148,7 +148,7 @@ class getStreamData(threading.Thread):
 
     def run(self):
         while True:
-            time.sleep(2.5)
+            time.sleep(3.5)
             if self.pauseload.is_set():
                 continue
             try:
