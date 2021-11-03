@@ -194,6 +194,10 @@ class getStreamData(threading.Thread):
                             current_users[user].leverage[pos["symbol"]] = int(
                                 pos["leverage"]
                             )
+                    for user in current_users_subaccount:
+                        for subacc in current_users_subaccount[user]:
+                            if subacc.lmode == 0:
+                                subacc.leverage[pos['symbol']] = int(pos['leverage'])
             newPosition = pd.DataFrame(
                 {
                     "symbol": symbol,
