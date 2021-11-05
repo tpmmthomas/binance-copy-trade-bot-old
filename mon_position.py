@@ -1809,6 +1809,9 @@ def save_to_file(update: Update, context: CallbackContext):
                 "platform": user.tplatform,
             }
         )
+    if len(save_items) == 0:
+        logger.info("No user profiles found, will not be saved.")
+        return ConversationHandler.END
     with open("userdata.pickle", "wb") as f:
         pickle.dump(save_items, f)
     logger.info("Saved user current state.")
