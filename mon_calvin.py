@@ -7,6 +7,7 @@ from time import sleep
 import binance
 import pandas as pd
 from datetime import datetime, timedelta
+from datetime import time as timed
 import threading
 import time
 import logging
@@ -126,6 +127,21 @@ def show_positions():
         updater.bot.sendMessage(chat_id=chat_id, text="The latest position:\n" + pos)
 
 
+def time_in_danger():
+    def time_in_range(start, end, x):
+        if start <= end:
+            return start <= x and x <= end
+        else:
+            return start <= x or x <= end
+
+    now = datetime.now().time()
+    return (
+        time_in_range(timed(23, 59, 58), timed(0, 1, 0), now)
+        or time_in_range(timed(7, 59, 58), timed(8, 1, 0), now)
+        or time_in_range(timed(15, 59, 58), timed(16, 1, 0), now)
+    )
+
+
 class getStreamData(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
@@ -169,6 +185,9 @@ class getStreamData(threading.Thread):
             listTradingSymbols = []
             if result is None:
                 continue
+            if time_in_danger():
+                logger.info("Skipping checking during unstable time.")
+                continue
             for pos in result:
                 pos = pos["data"]
                 if float(pos["size"]) != 0:
@@ -197,7 +216,7 @@ class getStreamData(threading.Thread):
                     for user in current_users_subaccount:
                         for subacc in current_users_subaccount[user]:
                             if subacc.lmode == 0:
-                                subacc.leverage[pos['symbol']] = int(pos['leverage'])
+                                subacc.leverage[pos["symbol"]] = int(pos["leverage"])
             newPosition = pd.DataFrame(
                 {
                     "symbol": symbol,
