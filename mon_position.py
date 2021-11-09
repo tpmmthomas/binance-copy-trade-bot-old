@@ -3947,13 +3947,13 @@ class BybitClient:
         ).result()[0]
         response = ""
         for pos in result["result"]:
-            if float(pos["free_qty"]) > 0:
-                side = "Buy" if pos["side"] == "Sell" else "Buy"
+            if float(abs(pos["free_qty"])) > 0:
+                side = "Buy" if pos["side"] == "Sell" else "Sell"
                 self.client.LinearOrder.LinearOrder_new(
                     side=side,
                     symbol=symbol,
                     order_type="Market",
-                    qty=float(pos["free_qty"]),
+                    qty=float(abs(pos["free_qty"])),
                     time_in_force="GoodTillCancel",
                     reduce_only=True,
                     close_on_trigger=True,
