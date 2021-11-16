@@ -2290,14 +2290,14 @@ class BybitClient:
             updater.bot.sendMessage(self.chat_id, "API invalid.")
             return
         for pos in result:
-            if float(pos["free_qty"]) > 0:
+            if float(abs(pos["free_qty"])) > 0:
                 logger.info("Hi")
                 side = "Buy" if pos["side"] == "Sell" else "Sell"
                 self.client.LinearOrder.LinearOrder_new(
                     side=side,
                     symbol=symbol,
                     order_type="Market",
-                    qty=float(pos["free_qty"]),
+                    qty=float(abs(pos["free_qty"])),
                     time_in_force="GoodTillCancel",
                     reduce_only=True,
                     close_on_trigger=True,
