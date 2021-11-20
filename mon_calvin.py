@@ -189,7 +189,11 @@ class getStreamData(threading.Thread):
                 logger.info("Skipping checking during unstable time.")
                 continue
             for pos in result:
-                pos = pos["data"]
+                try:
+                    pos = pos["data"]
+                except:
+                    logger.error("Whatttt?")
+                    continue
                 if float(pos["size"]) != 0:
                     try:
                         mp = self.client.LinearKline.LinearKline_get(
