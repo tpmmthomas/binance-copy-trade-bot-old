@@ -870,14 +870,14 @@ class FetchLatestPosition(threading.Thread):
                 secondtp[symbol] = self.take_profit_percent[symbol]
                 secondsl[symbol] = self.stop_loss_percent[symbol]
             else:
-                secondProportion[symbol] = 0
-                secondLeverage[symbol] = 20
-                secondtmodes[symbol] = 0
-                secondtp[symbol] = -1
-                secondsl[symbol] = -1
+                secondProportion[symbol] = self.proportion["XRPUSDT"]
+                secondLeverage[symbol] = self.leverage["XRPUSDT"]
+                secondtmodes[symbol] = self.tmodes["XRPUSDT"]
+                secondtp[symbol] = self.take_profit_percent["XRPUSDT"]
+                secondsl[symbol] = self.stop_loss_percent["XRPUSDT"]
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
-                    text=f"Please note that there is a new symbol {symbol} available for {self.name}. You may want to adjust your settings for it.",
+                    text=f"Please note that there is a new symbol {symbol} available for {self.name}. You may want to adjust your settings for it. Currently the setting is synchronized with that of the symbol XRPUSDT.",
                 )
         self.proportion = secondProportion
         self.leverage = secondLeverage
