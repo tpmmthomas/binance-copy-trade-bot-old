@@ -4379,7 +4379,7 @@ class BybitClient:
                     "result"
                 ][0]["mark_price"]
             )
-            reqticksize = min(self.ticksize[tradeinfo[1]],0)
+            reqticksize = max(self.ticksize[tradeinfo[1]],0)
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant = self.round_up(quant, reqstepsize)
             collateral = (latest_price * quant) / leverage[tradeinfo[1]]
