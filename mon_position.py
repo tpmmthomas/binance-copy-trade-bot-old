@@ -809,7 +809,8 @@ class FetchLatestPosition(threading.Thread):
                 #     int(max(0, avgwaittime[0] + 1)), int(max(0, avgwaittime[0] + 5))
                 # )
                 # time.sleep(sleeptime)
-            except:
+            except Exception as e:
+                logger.info(f"Debug {e}")
                 logger.error("Some uncaught error! Oh no.")
                 updater.bot.sendMessage(
                     chat_id=self.chat_id,
