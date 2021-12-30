@@ -3037,19 +3037,37 @@ def viewpnlstat(update: Update, context: CallbackContext):
         return
     piclock.acquire()
     daily = 24 * 30
-    p1 = Process(target=plotgraph, args=(pastvalue[-daily:], "Daily Balance",))
+    p1 = Process(
+        target=plotgraph,
+        args=(
+            pastvalue[-daily:],
+            "Daily Balance",
+        ),
+    )
     p1.start()
     p1.join()
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     weekly = 7 * 24 * 30
-    p2 = Process(target=plotgraph, args=(pastvalue[-weekly:], "Weekly Balance",))
+    p2 = Process(
+        target=plotgraph,
+        args=(
+            pastvalue[-weekly:],
+            "Weekly Balance",
+        ),
+    )
     p2.start()
     p2.join()
     with open("0.png", "rb") as f:
         updater.bot.sendPhoto(user.chat_id, f)
     monthly = 30 * 7 * 24 * 30
-    p3 = Process(target=plotgraph, args=(pastvalue[-monthly:], "Monthly Balance",))
+    p3 = Process(
+        target=plotgraph,
+        args=(
+            pastvalue[-monthly:],
+            "Monthly Balance",
+        ),
+    )
     p3.start()
     p3.join()
     with open("0.png", "rb") as f:
@@ -3244,7 +3262,9 @@ def reload_updater():
     )
     conv_handler12 = ConversationHandler(
         entry_points=[CommandHandler("end", end_all)],
-        states={COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],},
+        states={
+            COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler13 = ConversationHandler(
@@ -3353,7 +3373,9 @@ def reload_updater():
     )
     conv_handler23 = ConversationHandler(
         entry_points=[CommandHandler("closeposition", close_position)],
-        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
+        states={
+            CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler24 = ConversationHandler(
@@ -4374,12 +4396,15 @@ class BybitClient:
                         text=f"{side} {checkKey}: This trade will not be executed because size = 0. Adjust proportion if you want to follow.",
                     )
                 continue
-            latest_price = float(
-                self.client.Market.Market_symbolInfo(symbol=tradeinfo[1]).result()[0][
-                    "result"
-                ][0]["mark_price"]
-            )
-            reqticksize = max(self.ticksize[tradeinfo[1]],0)
+            try:
+                latest_price = float(
+                    self.client.Market.Market_symbolInfo(symbol=tradeinfo[1]).result()[
+                        0
+                    ]["result"][0]["mark_price"]
+                )
+            except:
+                latest_price = 1e-7
+            reqticksize = max(self.ticksize[tradeinfo[1]], 0)
             reqstepsize = self.stepsize[tradeinfo[1]]
             quant = self.round_up(quant, reqstepsize)
             collateral = (latest_price * quant) / leverage[tradeinfo[1]]
@@ -5629,7 +5654,9 @@ def main() -> None:
     )
     conv_handler12 = ConversationHandler(
         entry_points=[CommandHandler("end", end_all)],
-        states={COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],},
+        states={
+            COCO: [MessageHandler(Filters.regex("^(yes)$"), realEndAll)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler13 = ConversationHandler(
@@ -5738,7 +5765,9 @@ def main() -> None:
     )
     conv_handler23 = ConversationHandler(
         entry_points=[CommandHandler("closeposition", close_position)],
-        states={CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],},
+        states={
+            CP1: [MessageHandler(Filters.text & ~Filters.command, conf_symbol)],
+        },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
     conv_handler24 = ConversationHandler(
