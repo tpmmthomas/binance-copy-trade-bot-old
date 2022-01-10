@@ -27,9 +27,4 @@ USE THIS SOFTWARE AT YOUR OWN RISK. THE AUTHORS ASSUME NO RESPONSIBILITY FOR YOU
 
 Start by running backtesting of the bot first. Do not engage money before you understand how it works and what profit/loss you should expect.  
 
-### Donations
-If you find this software helpful, welcome to make a donation!  
-BTC: 12TjqRz4MTTfjLXYrEueGVP1sKrpezWkxG   
-ETH(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98   
-BNB(ERC20/BSC): 0x8eac5642ebaeb6bf4922d150c2b398cb352dbf98
 
