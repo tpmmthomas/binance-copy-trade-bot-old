@@ -2880,7 +2880,7 @@ def change_api(update: Update, context: CallbackContext):
     else:
         update.message.reply_text("Please provide your API Key from AAX.")
     update.message.reply_text(
-        "*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *35.229.163.161*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",
+        "*SECURITY WARNING*\nTo ensure safety of funds, please note the following before providing your API key:\n1. Set up a new key for this program, don't reuse your other API keys.\n2. Restrict access to this IP: *redacted*\n3. Only allow these API Restrictions: 'Enable Reading' and 'Enable Futures'.",
         parse_mode=telegram.ParseMode.MARKDOWN,
     )
     return SEP1
