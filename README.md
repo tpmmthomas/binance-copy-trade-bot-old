@@ -1,4 +1,8 @@
-# binance-copy-trade-bot (still in development)
+# binance-copy-trade-bot 
+
+## 2022-06-19 update: I will resume developement of this project in a new repo. It is currently private but will be released soon. Please stay tuned!
+
+
 This program uses web scraping to monitor the positions opened by traders sharing their positions on Binance Futures Leaderboard. We then mimic the trade in your account using the Binance api.
 ### Environment setup (Recommended)
 
